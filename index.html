@@ -1,70 +1,952 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>牙齒圖表示範</title>
-  <style>
-    svg {
-      width: 100%;
-      max-width: 600px;
-    }
-    .tooth {
-      cursor: pointer;
-      fill: white;
-      stroke: black;
-      stroke-width: 1;
-    }
-    .prosthetic {
-      fill: gray;
-    }
-    .missing {
-      display: none;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牙周治療紀錄表 (Extended Patient Info)</title>
+    
+    <!-- React & Tailwind -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Export Tools -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyA9ZQx9eGD51K-VfUCuMddYWrsg2W9k16o",
+            authDomain: "tooth-treat--charteasy.firebaseapp.com",
+            projectId: "tooth-treat--charteasy",
+            storageBucket: "tooth-treat--charteasy.firebasestorage.app",
+            messagingSenderId: "675075241868",
+            appId: "1:675075241868:web:22d36417ed0d0f35ed08a9",
+            measurementId: "G-GKM48Y8JKR"
+        };
+
+        let db = null;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            window.db = db;
+            window.firestoreModules = { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit };
+        } catch(e) {
+            console.warn("Firebase Init Error", e);
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans TC', sans-serif; 
+            background-color: #525252; 
+            color: #000000; 
+            margin: 0;
+            padding: 20px;
+        }
+        
+        /* RWD A4 Container */
+        .a4-landscape-paper {
+            width: 100%;
+            max-width: 297mm; 
+            min-height: 210mm;
+            background: white;
+            margin: 0 auto 30px auto;
+            padding: 10mm;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media print {
+            @page { size: landscape; margin: 0; }
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .a4-landscape-paper {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                max-width: none;
+                height: 100vh;
+                page-break-after: always;
+                padding: 5mm 10mm;
+            }
+            .a4-landscape-paper:last-child { page-break-after: auto; }
+        }
+
+        .chart-container { 
+            width: 100%;
+            overflow: hidden; 
+            background: white; 
+            border: 2px solid #000; 
+            padding: 5px; 
+            box-shadow: none; 
+            margin-bottom: 15px;
+        }
+        
+        .perio-table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            table-layout: fixed; 
+            font-size: 11px;
+        }
+        
+        .perio-table th, .perio-table td { 
+            border: 1px solid #000; 
+            text-align: center; 
+            vertical-align: middle; 
+            height: 38px; 
+            padding: 0; 
+        }
+
+        /* Compact styles for Plaque Record */
+        .plaque-compact .chart-container {
+            margin-bottom: 5px;
+            padding: 2px;
+            border: 1px solid #000;
+        }
+        .plaque-compact .perio-table td {
+            height: 24px; 
+            font-size: 10px;
+        }
+        .plaque-compact .tooth-row {
+            height: 20px;
+            font-size: 11px;
+        }
+        .plaque-compact .header-sub {
+            padding: 0 1px;
+            font-size: 10px;
+        }
+        .plaque-compact .indicator-box {
+            width: 10px;
+            height: 10px;
+        }
+        
+        .col-header-main { width: 40px; } 
+        .col-header-sub { width: 90px; } 
+
+        .header-main { 
+            background-color: #e5e7eb; 
+            color: #000000; 
+            padding: 0;
+            height: 100%;
+            vertical-align: middle;
+        }
+        
+        .header-main-inner {
+            writing-mode: vertical-lr; 
+            text-orientation: mixed;
+            letter-spacing: 0px; 
+            font-size: 11px;     
+            font-weight: 900;    
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center; 
+            justify-content: center; 
+            margin: 0 auto;
+            text-transform: none;
+        }
+        
+        .header-sub { 
+            background-color: #f3f4f6; 
+            font-weight: 700; 
+            color: #000000; 
+            font-size: 11px; 
+            white-space: nowrap; 
+            padding: 0 1px;
+        }
+
+        .tooth-row { 
+            background-color: #000000; 
+            color: #ffffff; 
+            font-weight: bold; 
+            height: 28px; 
+            font-size: 13px; 
+        }
+        .tooth-cell { 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px; 
+            font-weight: 700;
+        }
+        .tooth-cell:hover { background-color: #4b5563; }
+        .tooth-cell.missing { color: #d1d5db; text-decoration: line-through; background-color: #374151; }
+
+        .cycle-cell { 
+            cursor: pointer; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; 
+            font-weight: bold; font-size: 14px; user-select: none; color: #000;
+        }
+        .cycle-cell:hover { background-color: #e5e7eb; }
+        .cycle-val-3 { color: #dc2626; background-color: #fee2e2; } 
+
+        .furc-container { display: flex; width: 100%; height: 100%; }
+        .furc-subcell { 
+            flex: 1; border-right: 1px solid #d1d5db; display: flex; align-items: center; justify-content: center; 
+            font-size: 10px; font-weight: bold; cursor: pointer; color: #9ca3af;
+        }
+        .furc-subcell.val-active { color: #000000; font-size: 12px; font-weight: 900; }
+        .furc-subcell:last-child { border-right: none; }
+        .furc-subcell:hover { background-color: #f3f4f6; }
+
+        .pd-input { 
+            width: 100%; height: 100%; text-align: center; border: none; background: transparent; 
+            font-size: 13px; 
+            font-weight: 700; font-family: 'Roboto Mono', monospace; color: #000;
+            padding: 0; margin: 0;
+        }
+        .pd-input:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
+        .val-danger { color: #dc2626; font-weight: 900; }
+
+        .indicator-row { display: flex; justify-content: center; align-items: center; gap: 2px; height: 100%; }
+        .indicator-box { width: 12px; height: 12px; border: 1px solid #9ca3af; border-radius: 2px; cursor: pointer; }
+        .plaque-active { background-color: #2563eb; border-color: #2563eb; }
+
+        .missing-cell { background: repeating-linear-gradient(45deg, #e5e7eb, #e5e7eb 5px, #ffffff 5px, #ffffff 10px); pointer-events: none; opacity: 0.8; }
+        
+        .border-thick-top { border-top: 2px solid #000 !important; }
+        .border-thick-bottom { border-bottom: 2px solid #000 !important; }
+        .bg-init { background-color: #fff; }
+        .bg-reeval { background-color: #f9fafb; }
+
+        .tab-btn { padding: 10px 20px; font-weight: bold; border-radius: 8px 8px 0 0; cursor: pointer; border: 1px solid transparent; margin-right: 4px; font-size: 14px; }
+        .tab-btn.active { background-color: white; color: #000; border-color: transparent; z-index: 10; margin-bottom: -1px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
+        .tab-btn.inactive { background-color: #404040; color: #d1d5db; border-color: transparent; }
+        
+        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.9); color: white; padding: 12px 24px; border-radius: 50px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; font-weight: 500; }
+        .toast.show { opacity: 1; }
+
+        .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; }
+
+        /* Summary Box */
+        .summary-box {
+            margin-top: 5px;
+            margin-bottom: 10px;
+            border: 2px solid #000;
+            padding: 5px;
+            background-color: #f8fafc;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .plaque-compact .summary-box {
+            margin-top: 2px;
+            margin-bottom: 5px;
+            padding: 3px;
+            gap: 5px;
+        }
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px; 
+        }
+        .summary-label {
+            font-size: 11px;
+            color: #4b5563;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .summary-value {
+            font-size: 16px;
+            font-weight: 900;
+            color: #000;
+        }
+        .summary-value.highlight {
+            color: #dc2626;
+        }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 999; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; max-width: 95vw; max-height: 95vh; overflow: auto; display: flex; flex-col; gap: 4; }
+        .preview-img { max-width: 100%; border: 1px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .header-control { 
+            display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: normal; 
+            background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px;
+        }
+        .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
+        .header-radio input { cursor: pointer; }
+
+        /* Plaque Record Styles */
+        .plaque-record-unit {
+            /* Styles for individual record inside the page */
+            margin-bottom: 10mm;
+            padding-bottom: 5mm;
+            border-bottom: 2px dashed #ccc;
+        }
+        .plaque-record-unit:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .date-input-custom {
+            background: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .date-input-custom::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+
+        /* Patient Info Header Styles */
+        .patient-info-header {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #000;
+            padding: 0 8px;
+            margin-bottom: 8px;
+        }
+        .patient-info-header span {
+            white-space: nowrap;
+        }
+        .plaque-compact .patient-info-header {
+            color: #1e40af; /* Blue for Plaque Record */
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+    </style>
 </head>
 <body>
-  <h2>上排牙齒圖表示範</h2>
-  <svg viewBox="0 0 600 100">
-    <!-- 8 顆牙齒（右到左：18 ~ 11） -->
-    <g id="tooth-18" class="tooth" onclick="cycleToothState(this)" transform="translate(0,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-17" class="tooth" onclick="cycleToothState(this)" transform="translate(60,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-16" class="tooth" onclick="cycleToothState(this)" transform="translate(120,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-15" class="tooth" onclick="cycleToothState(this)" transform="translate(180,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-14" class="tooth" onclick="cycleToothState(this)" transform="translate(240,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-13" class="tooth" onclick="cycleToothState(this)" transform="translate(300,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-12" class="tooth" onclick="cycleToothState(this)" transform="translate(360,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-    <g id="tooth-11" class="tooth" onclick="cycleToothState(this)" transform="translate(420,0)">
-      <rect x="0" y="10" width="50" height="80" />
-    </g>
-  </svg>
+    <div id="root"></div>
 
-  <script>
-    function cycleToothState(el) {
-      if (el.classList.contains('missing')) {
-        el.classList.remove('missing');
-        el.classList.remove('prosthetic');
-      } else if (el.classList.contains('prosthetic')) {
-        el.classList.add('missing');
-        el.classList.remove('prosthetic');
-      } else {
-        el.classList.add('prosthetic');
-      }
-    }
-  </script>
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useMemo } = React;
+
+        const Teeth18to11 = [18, 17, 16, 15, 14, 13, 12, 11];
+        const Teeth21to28 = [21, 22, 23, 24, 25, 26, 27, 28];
+        const Teeth48to41 = [48, 47, 46, 45, 44, 43, 42, 41];
+        const Teeth31to38 = [31, 32, 33, 34, 35, 36, 37, 38];
+        const allTeeth = [...Teeth18to11, ...Teeth21to28, ...Teeth48to41, ...Teeth31to38];
+
+        const createToothData = () => ({
+            missing: false,
+            mobility: { initial: 0, reeval: 0 },
+            furcation: { initial: { D: 0, B: 0, M: 0 }, reeval: { D: 0, B: 0, M: 0 } },
+            buccal: { pd: { initial: ['', '', ''], reeval: ['', '', ''] } },
+            palatal: { pd: { initial: ['', '', ''], reeval: ['', '', ''] } }
+        });
+
+        const createPlaqueToothData = () => ({
+            buccal: [false, false, false],
+            palatal: [false, false, false]
+        });
+
+        const initialData = {};
+        allTeeth.forEach(id => initialData[id] = createToothData());
+
+        const createNewPlaqueRecord = () => {
+            const teethData = {};
+            allTeeth.forEach(id => teethData[id] = createPlaqueToothData());
+            return {
+                id: Date.now(),
+                date: new Date().toISOString().split('T')[0],
+                data: teethData
+            };
+        };
+
+        const chunkArray = (arr, size) => {
+            const results = [];
+            for (let i = 0; i < arr.length; i += size) {
+                results.push(arr.slice(i, i + size));
+            }
+            return results;
+        };
+
+        const App = () => {
+            const [data, setData] = useState(initialData);
+            const [plaqueRecords, setPlaqueRecords] = useState([createNewPlaqueRecord()]);
+            // 更新 Patient Info 初始狀態，加入新欄位
+            const [patientInfo, setPatientInfo] = useState({ 
+                name: '', 
+                id: '', 
+                idNumber: '', // 身份證
+                gender: '',   // 性別
+                age: '',      // 年齡
+                doctor: '',   // 醫師
+                date: new Date().toISOString().split('T')[0] 
+            });
+            const [activeTab, setActiveTab] = useState('chart');
+            const [toastMsg, setToastMsg] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [startUpper, setStartUpper] = useState('18');
+            const [startLower, setStartLower] = useState('48');
+            const [previewImg, setPreviewImg] = useState(null);
+
+            const chartRef = useRef(null);
+            
+            const db = window.db;
+            const { doc, setDoc, onSnapshot } = window.firestoreModules || {};
+
+            const perioStats = useMemo(() => {
+                let totalTeeth = 0;
+                let deepTeethInit = 0;
+                let improvedTeeth = 0;
+
+                allTeeth.forEach(id => {
+                    const tooth = data[id];
+                    if (tooth.missing) return;
+                    totalTeeth++;
+                    let hasDeepPocket = false;
+                    const checkDeep = (arr) => arr.some(v => v && parseInt(v) >= 5);
+                    if (checkDeep(tooth.buccal.pd.initial) || checkDeep(tooth.palatal.pd.initial)) {
+                        hasDeepPocket = true;
+                        deepTeethInit++;
+                    }
+                    const checkImprove = (initArr, reArr) => {
+                        for(let i=0; i<3; i++) {
+                            const init = parseInt(initArr[i]) || 0;
+                            const re = parseInt(reArr[i]) || 0;
+                            if (init > 0 && re > 0 && (init - re) >= 2) return true;
+                        }
+                        return false;
+                    };
+                    if (checkImprove(tooth.buccal.pd.initial, tooth.buccal.pd.reeval) || 
+                        checkImprove(tooth.palatal.pd.initial, tooth.palatal.pd.reeval)) {
+                        improvedTeeth++;
+                    }
+                });
+
+                let improvementRate = 0;
+                if (deepTeethInit > 0) {
+                    improvementRate = ((improvedTeeth / deepTeethInit) * 100).toFixed(1);
+                }
+                return { totalTeeth, deepTeethInit, improvedTeeth, improvementRate };
+            }, [data]);
+
+            const getPlaqueStats = (record) => {
+                let totalTeeth = 0;
+                let totalSites = 0;
+                let plaqueSites = 0;
+                
+                allTeeth.forEach(id => {
+                    if (data[id].missing) return; 
+                    
+                    totalTeeth++;
+                    totalSites += 6;
+                    const toothPlaque = record.data[id];
+                    if (toothPlaque) {
+                        const bCount = toothPlaque.buccal.filter(Boolean).length;
+                        const pCount = toothPlaque.palatal.filter(Boolean).length;
+                        plaqueSites += (bCount + pCount);
+                    }
+                });
+                const index = totalSites > 0 ? ((plaqueSites / totalSites) * 100).toFixed(1) : 0;
+                return { totalTeeth, totalSites, plaqueSites, index };
+            };
+
+            const getUpperTeeth = () => startUpper === '18' ? [...Teeth18to11, ...Teeth21to28] : [...[...Teeth21to28].reverse(), ...[...Teeth18to11].reverse()];
+            const getLowerTeeth = () => startLower === '48' ? [...Teeth48to41, ...Teeth31to38] : [...[...Teeth31to38].reverse(), ...[...Teeth48to41].reverse()];
+
+            const showToast = (msg) => {
+                setToastMsg(msg);
+                setTimeout(() => setToastMsg(''), 3000);
+            };
+
+            useEffect(() => {
+                if (!db || !patientInfo.id) return;
+                setIsLoading(true);
+                const unsub = onSnapshot(doc(db, "patients", patientInfo.id), (docSnap) => {
+                    if (docSnap.exists()) {
+                        const cloudData = docSnap.data();
+                        // 確保新舊資料相容
+                        setPatientInfo(prev => ({ 
+                            ...prev, 
+                            ...cloudData.info 
+                        }));
+                        if (cloudData.data) setData(cloudData.data);
+                        if (cloudData.plaqueRecords && Array.isArray(cloudData.plaqueRecords)) {
+                            setPlaqueRecords(cloudData.plaqueRecords);
+                        } else {
+                            setPlaqueRecords([createNewPlaqueRecord()]);
+                        }
+                        showToast(`🔄 已同步 ${patientInfo.id}`);
+                    }
+                    setIsLoading(false);
+                }, (error) => setIsLoading(false));
+                return () => unsub();
+            }, [patientInfo.id]);
+
+            const handleSaveAndPreview = async () => {
+                if (!patientInfo.id) { alert('請輸入病歷號'); return; }
+                if (db) {
+                    setIsLoading(true);
+                    try {
+                        await setDoc(doc(db, "patients", patientInfo.id), {
+                            info: patientInfo,
+                            data: data, 
+                            plaqueRecords: plaqueRecords,
+                            lastModified: new Date().toISOString()
+                        });
+                        showToast("✅ 已儲存至雲端");
+                    } catch (e) {
+                        console.error(e);
+                        alert("儲存失敗，請檢查網路");
+                    } finally {
+                        setIsLoading(false);
+                    }
+                }
+                await generatePreview();
+            };
+
+            const generatePreview = async () => {
+                const selector = activeTab === 'chart' ? '.a4-landscape-paper' : '.a4-landscape-paper'; 
+                const element = document.querySelector(selector);
+                if(!element) return;
+
+                const canvas = await html2canvas(element, { 
+                    scale: 2, 
+                    useCORS: true, 
+                    backgroundColor: "#ffffff",
+                });
+                setPreviewImg(canvas.toDataURL('image/jpeg', 0.9));
+            };
+
+            const toggleMissing = (id) => setData(prev => ({ ...prev, [id]: { ...prev[id], missing: !prev[id].missing } }));
+            
+            const handleCycleClick = (id, cat, sub, field) => {
+                if (data[id].missing) return;
+                setData(prev => {
+                    const newData = { ...prev };
+                    const tooth = { ...newData[id] };
+                    const cycle = (c) => (!c ? 1 : (c === 3 ? 0 : c + 1));
+                    if (cat === 'mobility') tooth.mobility[sub] = cycle(tooth.mobility[sub]);
+                    else if (cat === 'furcation') tooth.furcation[sub][field] = cycle(tooth.furcation[sub][field]);
+                    newData[id] = tooth;
+                    return newData;
+                });
+            };
+
+            const updatePD = (id, surface, stage, index, value) => {
+                if (data[id].missing) return;
+                if (value.length > 1) value = value.slice(-1);
+                if (!/^[0-9]?$/.test(value)) return;
+                setData(prev => {
+                    const newData = { ...prev };
+                    newData[id][surface].pd[stage] = [...prev[id][surface].pd[stage]];
+                    newData[id][surface].pd[stage][index] = value;
+                    return newData;
+                });
+                if (value.length === 1) handleNavigate(id, surface, stage, index, 'next');
+            };
+
+            const addNewPlaqueRecord = () => {
+                setPlaqueRecords(prev => [...prev, createNewPlaqueRecord()]);
+                setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+            };
+
+            const updatePlaqueDate = (recordIndex, newDate) => {
+                setPlaqueRecords(prev => {
+                    const newList = [...prev];
+                    newList[recordIndex] = { ...newList[recordIndex], date: newDate };
+                    return newList;
+                });
+            };
+
+            const togglePlaque = (recordIndex, id, surface, index) => {
+                if (data[id].missing) return;
+                setPlaqueRecords(prev => {
+                    const newList = [...prev];
+                    const record = { ...newList[recordIndex] };
+                    const toothData = { ...record.data[id] };
+                    const newArr = [...toothData[surface]];
+                    newArr[index] = !newArr[index];
+                    toothData[surface] = newArr;
+                    record.data = { ...record.data, [id]: toothData };
+                    newList[recordIndex] = record;
+                    return newList;
+                });
+            };
+
+            const focusAndScroll = (id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.focus();
+                    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+                }
+            };
+
+            const handleNavigate = (currentId, surface, stage, index, direction) => {
+                const upperOrder = getUpperTeeth();
+                const lowerOrder = getLowerTeeth();
+                const currentPath = upperOrder.includes(currentId) ? upperOrder : lowerOrder;
+                const currIdx = currentPath.indexOf(currentId);
+                
+                if (direction === 'vertical') {
+                    const nextStage = stage === 'initial' ? 'reeval' : 'initial';
+                    focusAndScroll(`pd-${currentId}-${surface}-${nextStage}-${index}`);
+                    return;
+                }
+                const dirVal = direction === 'next' ? 1 : -1;
+                let nextIndex = index + dirVal;
+                if (nextIndex >= 0 && nextIndex <= 2) {
+                    focusAndScroll(`pd-${currentId}-${surface}-${stage}-${nextIndex}`);
+                    return;
+                }
+                let scanIdx = currIdx + dirVal;
+                while (scanIdx >= 0 && scanIdx < currentPath.length) {
+                    const tid = currentPath[scanIdx];
+                    if (!data[tid].missing) {
+                        const targetIdx = direction === 'next' ? 0 : 2;
+                        focusAndScroll(`pd-${tid}-${surface}-${stage}-${targetIdx}`);
+                        return;
+                    }
+                    scanIdx += dirVal;
+                }
+            };
+
+            const handleKeyDown = (e, currentId, surface, stage, index) => {
+                if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) return;
+                e.preventDefault();
+                if (e.key === 'ArrowLeft') handleNavigate(currentId, surface, stage, index, 'prev');
+                else if (e.key === 'ArrowRight' || e.key === 'Enter') handleNavigate(currentId, surface, stage, index, 'next');
+                else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') handleNavigate(currentId, surface, stage, index, 'vertical');
+            };
+
+            const handleFocus = (e) => {
+                setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
+            };
+
+            const renderMobilityCell = (id, sub) => {
+                const val = data[id].mobility[sub];
+                if (data[id].missing) return <div className="missing-cell w-full h-full"></div>;
+                return <div className={`cycle-cell ${val===3?'cycle-val-3':''}`} onClick={()=>handleCycleClick(id,'mobility',sub)}>{val===0?'':val}</div>;
+            };
+
+            const renderFurcationCell = (id, sub) => {
+                const info = data[id].furcation[sub];
+                if (data[id].missing) return <div className="missing-cell w-full h-full"></div>;
+                const idNum = parseInt(id);
+                const noFurcationTeeth = [11, 12, 13, 21, 22, 23, 31, 32, 33, 34, 35, 41, 42, 43, 44, 45];
+                if (noFurcationTeeth.includes(idNum)) return <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-300 text-xs">/</div>;
+                if ([14, 15, 24, 25].includes(idNum)) {
+                    return (
+                        <div className="furc-container">
+                            {['M', 'D'].map(key => {
+                                const val = info[key];
+                                const isActive = val > 0;
+                                return <div key={key} className={`furc-subcell ${val===3?'cycle-val-3':''} ${isActive?'val-active':''}`} onClick={()=>handleCycleClick(id, 'furcation', sub, key)}>{val===0 ? key : val}</div>;
+                            })}
+                        </div>
+                    );
+                }
+                if ([36, 37, 38, 46, 47, 48].includes(idNum)) {
+                    const configs = [{ label: 'B', key: 'B' }, { label: 'L', key: 'M' }];
+                    return (
+                        <div className="furc-container">
+                            {configs.map(cfg => {
+                                const val = info[cfg.key];
+                                const isActive = val > 0;
+                                return <div key={cfg.label} className={`furc-subcell ${val===3?'cycle-val-3':''} ${isActive?'val-active':''}`} onClick={()=>handleCycleClick(id, 'furcation', sub, cfg.key)}>{val===0 ? cfg.label : val}</div>;
+                            })}
+                        </div>
+                    );
+                }
+                return (
+                    <div className="furc-container">
+                        {['D', 'B', 'M'].map(pos => {
+                            const val = info[pos];
+                            const isActive = val > 0;
+                            return <div key={pos} className={`furc-subcell ${val===3?'cycle-val-3':''} ${isActive?'val-active':''}`} onClick={()=>handleCycleClick(id,'furcation',sub,pos)}>{val===0?pos:val}</div>;
+                        })}
+                    </div>
+                );
+            };
+
+            const renderPDInputs = (id, surface, stage) => {
+                const vals = data[id][surface].pd[stage];
+                if (data[id].missing) return <div className="missing-cell w-full h-full"></div>;
+                return (
+                    <div className="flex h-full">
+                        {[0, 1, 2].map(i => (
+                            <div key={i} className="flex-1 border-r last:border-r-0 border-gray-300">
+                                <input id={`pd-${id}-${surface}-${stage}-${i}`} className={`pd-input ${parseInt(vals[i])>=5?'val-danger':''}`} type="tel" inputMode="numeric" pattern="[0-9]*" maxLength="1" enterKeyHint="next" value={vals[i]} onChange={(e)=>updatePD(id, surface, stage, i, e.target.value)} onKeyDown={(e)=>handleKeyDown(e, id, surface, stage, i)} onFocus={handleFocus} autoComplete="off" />
+                            </div>
+                        ))}
+                    </div>
+                );
+            };
+
+            const renderPlaqueRow = (recordIndex, id, surface) => {
+                const toothData = plaqueRecords[recordIndex].data[id];
+                const vals = toothData ? toothData[surface] : [false, false, false];
+                if (data[id].missing) return <div className="missing-cell w-full h-full"></div>;
+                return (
+                    <div className="indicator-row">
+                        {[0, 1, 2].map(i => <div key={i} className={`indicator-box ${vals[i]?'plaque-active':''}`} onClick={()=>togglePlaque(recordIndex, id, surface, i)} />)}
+                    </div>
+                );
+            };
+
+            const renderControls = (isUpper) => {
+                return (
+                    <div className="header-control">
+                        <span className="mr-2 opacity-80">起始:</span>
+                        <label className="header-radio"><input type="radio" checked={isUpper ? startUpper==='18' : startLower==='48'} onChange={()=> isUpper ? setStartUpper('18') : setStartLower('48')} /> {isUpper ? '18(右)' : '48(右)'}</label>
+                        <label className="header-radio ml-3"><input type="radio" checked={isUpper ? startUpper==='28' : startLower==='38'} onChange={()=> isUpper ? setStartUpper('28') : setStartLower('38')} /> {isUpper ? '28(左)' : '38(左)'}</label>
+                    </div>
+                );
+            };
+
+            const downloadPDF = () => {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                const imgProps = pdf.getImageProperties(previewImg);
+                const pdfW = 297;
+                const pdfH = 210;
+                const ratio = imgProps.width / imgProps.height;
+                let w = pdfW;
+                let h = w / ratio;
+                if (h > pdfH) {
+                    h = pdfH;
+                    w = h * ratio;
+                }
+                const x = (pdfW - w) / 2;
+                const y = (pdfH - h) / 2;
+                pdf.addImage(previewImg, 'JPEG', x, y, w, h);
+                pdf.save(`${activeTab}_${patientInfo.name}.pdf`);
+            };
+
+            const downloadJPG = () => {
+                const link = document.createElement('a');
+                link.download = `${activeTab}_${patientInfo.name}.jpg`;
+                link.href = previewImg;
+                link.click();
+            };
+
+            // 顯示所有病患資訊的 Header (共用)
+            const renderPatientInfoHeader = () => (
+                <div className="patient-info-header">
+                    <span>姓名: {patientInfo.name}</span>
+                    <span>病歷號: {patientInfo.id}</span>
+                    <span className="col-span-2">身分證字號: {patientInfo.idNumber}</span>
+                    <span>性別: {patientInfo.gender}</span>
+                    <span>年齡: {patientInfo.age}</span>
+                    <span className="col-span-2">主治醫師: {patientInfo.doctor}</span>
+                    <span className="col-span-4"></span> {/* Spacer */}
+                </div>
+            );
+
+            const renderPerioTab = () => (
+                <div className="a4-landscape-paper">
+                    <div className="text-center font-black text-2xl mb-2 border-b-4 border-black pb-1">PERIODONTAL TREATMENT CHART</div>
+                    
+                    {/* Perio Header with full details */}
+                    <div className="border-b-2 border-black mb-3 pb-2">
+                        {renderPatientInfoHeader()}
+                        <div className="px-2 font-bold">日期: {patientInfo.date}</div>
+                    </div>
+
+                    {/* Maxilla */}
+                    <div className="chart-container">
+                        <div className="bg-black text-white p-1 font-bold rounded-t flex justify-between items-center px-2 border border-black text-sm">
+                            <span>Maxilla (上顎)</span>{renderControls(true)}
+                        </div>
+                        <table className="perio-table">
+                            <colgroup><col className="col-header-main" /><col className="col-header-sub" />{getUpperTeeth().map(t => <col key={t} width="*" />)}</colgroup>
+                            <tbody>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Mobility</div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">術後 (Post)</td>{getUpperTeeth().map(id => <td key={`mob-re-${id}`}>{renderMobilityCell(id, 'reeval')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Furcation</div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">術後 (Post)</td>{getUpperTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Buccal</div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
+                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner">Palatal</div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Mandible */}
+                    <div className="chart-container">
+                        <div className="bg-black text-white p-1 font-bold rounded-t flex justify-between items-center px-2 border border-black text-sm">
+                            <span>Mandible (下顎)</span>{renderControls(false)}
+                        </div>
+                        <table className="perio-table">
+                            <colgroup><col className="col-header-main" /><col className="col-header-sub" />{getLowerTeeth().map(t => <col key={t} width="*" />)}</colgroup>
+                            <tbody>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Mobility</div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">術後 (Post)</td>{getLowerTeeth().map(id => <td key={`mob-re-${id}`}>{renderMobilityCell(id, 'reeval')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Furcation</div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">術後 (Post)</td>{getLowerTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Lingual</div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
+                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner">Buccal</div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
+                                <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="summary-box">
+                        <div className="summary-item"><span className="summary-label">治療前總齒數</span><span className="summary-value">{perioStats.totalTeeth}</span></div>
+                        <div className="summary-item"><span className="summary-label text-red-600">治療前囊袋≧5mm齒數</span><span className="summary-value highlight">{perioStats.deepTeethInit}</span></div>
+                        <div className="summary-item"><span className="summary-label text-green-700">改善齒數 (≧2mm)</span><span className="summary-value text-green-700">{perioStats.improvedTeeth}</span></div>
+                        <div className="summary-item"><span className="summary-label text-blue-800">改善率</span><span className="summary-value text-blue-800">{perioStats.improvementRate}%</span></div>
+                    </div>
+                    <div className="clinic-footer">桃園立潔牙醫診所</div>
+                </div>
+            );
+
+            const renderPlaqueTab = () => {
+                const plaquePages = chunkArray(plaqueRecords, 2);
+
+                return (
+                    <>
+                        {plaquePages.map((pageRecords, pageIdx) => (
+                            <div key={pageIdx} className="a4-landscape-paper plaque-compact">
+                                {pageRecords.map((record, idx) => {
+                                    const stats = getPlaqueStats(record);
+                                    const actualIdx = pageIdx * 2 + idx;
+                                    
+                                    return (
+                                        <div key={record.id + '_' + idx} className="plaque-record-unit">
+                                            <div className="text-center font-bold text-xl mb-1 border-b-2 border-blue-800 pb-1 text-blue-800">
+                                                PLAQUE CONTROL RECORD
+                                            </div>
+                                            
+                                            {/* Plaque Header with Info */}
+                                            <div className="mb-2 px-2 border-b border-blue-200 pb-1">
+                                                {renderPatientInfoHeader()}
+                                                <div className="flex justify-between items-center text-xs font-bold text-blue-800 mt-1">
+                                                    <span className="flex items-center gap-2 bg-blue-800 text-white px-2 py-0.5 rounded">
+                                                        Date: <input type="date" className="date-input-custom" value={record.date} onChange={(e) => updatePlaqueDate(actualIdx, e.target.value)} />
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* 統計區塊 (移至上方) */}
+                                            <div className="summary-box mb-2">
+                                                <div className="summary-item"><span className="summary-label">現有牙齒總數</span><span className="summary-value">{stats.totalTeeth}</span></div>
+                                                <div className="summary-item"><span className="summary-label">總檢測面數</span><span className="summary-value">{stats.totalSites}</span></div>
+                                                <div className="summary-item"><span className="summary-label">牙菌斑面數</span><span className="summary-value">{stats.plaqueSites}</span></div>
+                                                <div className="summary-item"><span className="summary-label text-blue-800">牙菌斑指數 (PCR)</span><span className={`summary-value ${stats.index > 20 ? 'highlight' : 'text-blue-800'}`}>{stats.index}%</span></div>
+                                            </div>
+
+                                            <div className="chart-container">
+                                                <div className="bg-blue-800 text-white p-0.5 font-bold rounded-t flex justify-between items-center px-2 text-xs">
+                                                    <span>Maxilla (上顎)</span>{renderControls(true)}
+                                                </div>
+                                                <table className="perio-table">
+                                                    <colgroup><col width="130" />{getUpperTeeth().map(t => <col key={t} width="*" />)}</colgroup>
+                                                    <tbody>
+                                                        <tr><td className="header-sub font-bold text-blue-600">Buccal (頰)</td>{getUpperTeeth().map(id => <td key={`s1-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'buccal')}</td>)}</tr>
+                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td>牙位 / NO.</td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                                        <tr><td className="header-sub font-bold text-blue-600">Palatal (顎)</td>{getUpperTeeth().map(id => <td key={`s2-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'palatal')}</td>)}</tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="chart-container">
+                                                <div className="bg-blue-800 text-white p-0.5 font-bold rounded-t flex justify-between items-center px-2 text-xs">
+                                                    <span>Mandible (下顎)</span>{renderControls(false)}
+                                                </div>
+                                                <table className="perio-table">
+                                                    <colgroup><col width="130" />{getLowerTeeth().map(t => <col key={t} width="*" />)}</colgroup>
+                                                    <tbody>
+                                                        <tr><td className="header-sub font-bold text-blue-600">Lingual (舌)</td>{getLowerTeeth().map(id => <td key={`s1-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'buccal')}</td>)}</tr>
+                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td>牙位 / NO.</td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                                        <tr><td className="header-sub font-bold text-blue-600">Buccal (頰)</td>{getLowerTeeth().map(id => <td key={`s2-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'palatal')}</td>)}</tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                        <div className="flex justify-center mt-6 no-print">
+                            <button onClick={addNewPlaqueRecord} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center gap-2">
+                                <span>➕ 新增下一次牙菌斑紀錄</span>
+                            </button>
+                        </div>
+                    </>
+                );
+            };
+
+            return (
+                <div className="min-h-screen">
+                    <div className={`toast ${toastMsg ? 'show' : ''}`}>{toastMsg}</div>
+
+                    <div className="w-full max-w-[1400px] bg-white p-5 rounded-lg shadow-md mb-6 flex flex-col gap-4 border border-gray-200 mx-auto mt-6 no-print">
+                        <div className="flex justify-between items-center border-b pb-4">
+                            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
+                                <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">RWD A4</span>
+                            </h1>
+                        </div>
+                        {/* 擴充的輸入欄位 */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
+                            <div className="flex flex-col">
+                                <label className="text-xs font-bold text-gray-500 mb-1">病歷號 (Chart No)</label>
+                                <input className="border-2 border-blue-200 rounded px-3 py-2 text-lg font-bold text-blue-900 focus:outline-none focus:border-blue-500" 
+                                       type="tel" inputMode="numeric" value={patientInfo.id} onChange={e=>setPatientInfo({...patientInfo, id: e.target.value})} placeholder="自動同步" />
+                            </div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">姓名</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.name} onChange={e=>setPatientInfo({...patientInfo, name: e.target.value})} /></div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">身份證字號</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.idNumber} onChange={e=>setPatientInfo({...patientInfo, idNumber: e.target.value})} /></div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">性別</label><select className="border border-gray-300 rounded px-3 py-2 bg-white" value={patientInfo.gender} onChange={e=>setPatientInfo({...patientInfo, gender: e.target.value})}><option value="">請選擇</option><option value="男">男</option><option value="女">女</option></select></div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">年齡</label><input type="number" className="border border-gray-300 rounded px-3 py-2" value={patientInfo.age} onChange={e=>setPatientInfo({...patientInfo, age: e.target.value})} /></div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">主治醫師</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.doctor} onChange={e=>setPatientInfo({...patientInfo, doctor: e.target.value})} /></div>
+                            <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">主日期</label><input type="date" className="border border-gray-300 rounded px-3 py-2 text-gray-700" value={patientInfo.date} onChange={e=>setPatientInfo({...patientInfo, date: e.target.value})} /></div>
+                            
+                            <div className="flex gap-2 ml-auto col-span-2 md:col-span-1 lg:col-span-1">
+                                <button onClick={handleSaveAndPreview} disabled={isLoading} className={`w-full px-4 py-2 rounded font-bold shadow flex justify-center items-center gap-2 text-white ${isLoading ? 'bg-gray-400' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                    {isLoading ? '處理中...' : '💾 儲存/列印'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full max-w-[297mm] flex pl-2 mx-auto no-print">
+                        <button className={`tab-btn ${activeTab === 'chart' ? 'active' : 'inactive'}`} onClick={() => setActiveTab('chart')}>牙周紀錄表</button>
+                        <button className={`tab-btn ${activeTab === 'plaque' ? 'active' : 'inactive'}`} onClick={() => setActiveTab('plaque')}>牙菌斑紀錄表</button>
+                    </div>
+
+                    <div ref={chartRef} className="w-full flex flex-col items-center">
+                        {activeTab === 'chart' ? renderPerioTab() : renderPlaqueTab()}
+                    </div>
+
+                    {previewImg && (
+                        <div className="modal-overlay" onClick={() => setPreviewImg(null)}>
+                            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold">🖨️ 列印預覽</h3>
+                                    <div className="flex gap-2">
+                                        <button onClick={downloadPDF} className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700">下載 PDF</button>
+                                        <button onClick={downloadJPG} className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700">下載 JPG</button>
+                                        <button onClick={() => setPreviewImg(null)} className="bg-gray-500 text-white px-3 py-1 rounded text-sm font-bold hover:bg-gray-600">關閉</button>
+                                    </div>
+                                </div>
+                                <img src={previewImg} alt="Preview" className="preview-img" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
