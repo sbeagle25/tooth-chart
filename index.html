@@ -551,57 +551,84 @@
                 // Auto preview is now triggered manually to avoid confusing flows
             };
 
-            // Unified Export Function
-            const downloadPDF = (format) => {
+            // Unified Export Function with Mobile Optimization
+            const downloadPDF = async (format) => {
                 const { jsPDF } = window.jspdf;
-                // Capture current view
                 const selector = '.a4-landscape-paper';
                 const element = document.querySelector(selector);
+                
                 if(!element) { alert('請先切換到要列印的頁面'); return; }
 
-                html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => {
+                // --- Mobile Capture Logic Fix ---
+                const originalStyle = {
+                    width: element.style.width,
+                    maxWidth: element.style.maxWidth,
+                    overflow: element.style.overflow
+                };
+
+                // Temporarily force desktop size for capture
+                element.style.width = '297mm';
+                element.style.maxWidth = 'none';
+                element.style.overflow = 'visible';
+                window.scrollTo(0, 0); // Reset scroll to ensure full capture
+
+                try {
+                    const canvas = await html2canvas(element, { 
+                        scale: 2, 
+                        useCORS: true, 
+                        backgroundColor: "#ffffff",
+                        windowWidth: 1200 // Simulate desktop width
+                    });
+                    
                     const imgData = canvas.toDataURL('image/jpeg', 0.95);
                     
-                    let pdf;
-                    let pdfW, pdfH;
-
-                    if (format === 'a5') {
-                        // A5 Landscape: 210mm x 148mm
-                        pdf = new jsPDF('l', 'mm', 'a5');
-                        pdfW = 210;
-                        pdfH = 148;
-                    } else if (format === 'jpg') {
-                        // JPG Export
+                    // Handle JPG Download
+                    if (format.startsWith('jpg')) {
                         const link = document.createElement('a');
-                        link.download = `${activeTab}_${patientInfo.name}.jpg`;
+                        link.download = `${activeTab}_${patientInfo.name}_${format.toUpperCase()}.jpg`;
                         link.href = imgData;
                         link.click();
-                        return; // Exit here for JPG
                     } else {
-                        // A4 Landscape: 297mm x 210mm
-                        pdf = new jsPDF('l', 'mm', 'a4');
-                        pdfW = 297;
-                        pdfH = 210;
-                    }
+                        // Handle PDF Download
+                        let pdf;
+                        let pdfW, pdfH;
 
-                    const imgProps = pdf.getImageProperties(imgData);
-                    const ratio = imgProps.width / imgProps.height;
-                    
-                    let w = pdfW;
-                    let h = w / ratio;
-                    
-                    // Fit to page
-                    if (h > pdfH) {
-                        h = pdfH;
-                        w = h * ratio;
-                    }
-                    
-                    const x = (pdfW - w) / 2;
-                    const y = (pdfH - h) / 2;
+                        if (format === 'a5') {
+                            pdf = new jsPDF('l', 'mm', 'a5');
+                            pdfW = 210;
+                            pdfH = 148;
+                        } else {
+                            pdf = new jsPDF('l', 'mm', 'a4');
+                            pdfW = 297;
+                            pdfH = 210;
+                        }
 
-                    pdf.addImage(imgData, 'JPEG', x, y, w, h);
-                    pdf.save(`${activeTab}_${patientInfo.name}_${format.toUpperCase()}.pdf`);
-                });
+                        const imgProps = pdf.getImageProperties(imgData);
+                        const ratio = imgProps.width / imgProps.height;
+                        
+                        let w = pdfW;
+                        let h = w / ratio;
+                        
+                        if (h > pdfH) {
+                            h = pdfH;
+                            w = h * ratio;
+                        }
+                        
+                        const x = (pdfW - w) / 2;
+                        const y = (pdfH - h) / 2;
+
+                        pdf.addImage(imgData, 'JPEG', x, y, w, h);
+                        pdf.save(`${activeTab}_${patientInfo.name}_${format.toUpperCase()}.pdf`);
+                    }
+                } catch (err) {
+                    console.error("Export failed", err);
+                    alert("匯出失敗，請重試");
+                } finally {
+                    // Restore original styles
+                    element.style.width = originalStyle.width;
+                    element.style.maxWidth = originalStyle.maxWidth;
+                    element.style.overflow = originalStyle.overflow;
+                }
             };
 
             const toggleMissing = (id) => setData(prev => ({ ...prev, [id]: { ...prev[id], missing: !prev[id].missing } }));
@@ -622,10 +649,9 @@
             const updatePD = (id, surface, stage, index, value) => {
                 if (data[id].missing) return;
                 
-                // Allow direct overwrite if inputting a single digit
-                // If current value is not empty, replace it with new digit.
+                // Allow direct overwrite logic
                 if (value.length > 1) {
-                    value = value.slice(-1); // Take the last entered character
+                    value = value.slice(-1); 
                 }
                 
                 if (!/^[0-9]?$/.test(value)) return;
@@ -637,7 +663,6 @@
                     return newData;
                 });
                 
-                // If a digit was entered (length 1), move to next
                 if (value.length === 1) handleNavigate(id, surface, stage, index, 'next');
             };
 
@@ -670,7 +695,6 @@
             };
 
             const handleFocus = (e) => {
-                // 手機版自動捲動
                 if (window.innerWidth <= 768) {
                     setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
                 }
@@ -988,8 +1012,11 @@
                             <button onClick={() => downloadPDF('a5')} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
                                 <span>🖨️ 下載 A5 PDF</span>
                             </button>
-                            <button onClick={() => downloadPDF('jpg')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
-                                <span>🖼️ 下載 JPG</span>
+                            <button onClick={() => downloadPDF('jpg_a4')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
+                                <span>🖼️ 下載 JPG (A4)</span>
+                            </button>
+                            <button onClick={() => downloadPDF('jpg_a5')} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
+                                <span>🖼️ 下載 JPG (A5)</span>
                             </button>
                         </div>
                     </div>
@@ -1011,7 +1038,7 @@
                                     <div className="flex gap-2">
                                         <button onClick={() => downloadPDF('a4')} className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700">A4 PDF</button>
                                         <button onClick={() => downloadPDF('a5')} className="bg-orange-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-orange-700">A5 PDF</button>
-                                        <button onClick={() => downloadPDF('jpg')} className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700">JPG</button>
+                                        <button onClick={() => downloadPDF('jpg_a4')} className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700">JPG (A4)</button>
                                         <button onClick={() => setPreviewImg(null)} className="bg-gray-500 text-white px-3 py-1 rounded text-sm font-bold hover:bg-gray-600">關閉</button>
                                     </div>
                                 </div>
