@@ -1,1 +1,1 @@
-# tooth-chart
+# perio-chart
