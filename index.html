@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (RWD + A4/A5/JPG Export)</title>
+    <title>牙周治療紀錄表 (RWD + Preview)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -82,7 +82,6 @@
                 padding: 5mm 10mm;
             }
             .a4-landscape-paper:last-child { page-break-after: auto; }
-            /* 列印時隱藏捲軸，強制顯示所有內容 */
             .chart-container { overflow: visible !important; } 
             .perio-table { min-width: 0 !important; width: 100% !important; }
         }
@@ -282,9 +281,7 @@
         .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
         .header-radio input { cursor: pointer; }
 
-        /* Plaque Record Styles */
         .plaque-record-unit {
-            /* Styles for individual record inside the page */
             margin-bottom: 10mm;
             padding-bottom: 5mm;
             border-bottom: 2px dashed #ccc;
@@ -308,7 +305,6 @@
             cursor: pointer;
         }
 
-        /* Patient Info Header Styles */
         .patient-info-header {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
@@ -328,7 +324,6 @@
             font-size: 11px;
         }
         
-        /* 手機上單欄顯示病患資料，避免擠壓 */
         @media screen and (max-width: 768px) {
             .patient-info-header {
                 grid-template-columns: 1fr 1fr;
@@ -338,15 +333,14 @@
             .patient-info-header span {
                 white-space: normal;
             }
-            /* 手機版樣式優化 (Mobile Responsive) */
             body { 
                 padding: 10px; 
-                background-color: #f3f4f6; /* 手機版背景改淺色 */
+                background-color: #f3f4f6; 
             }
             
             .a4-landscape-paper {
                 width: 100%;
-                max-width: none; /* 取消 A4 寬度限制，佔滿手機 */
+                max-width: none;
                 min-height: auto;
                 padding: 10px;
                 margin-bottom: 20px;
@@ -355,23 +349,19 @@
             }
 
             .chart-container {
-                /* 手機版允許橫向捲動，不再硬塞 */
                 overflow-x: auto; 
                 -webkit-overflow-scrolling: touch;
                 border: 1px solid #ccc;
             }
 
             .perio-table {
-                /* 手機版表格設最小寬度，強制出現捲軸，保持格子大小 */
                 min-width: 900px; 
             }
 
-            /* 手機版輸入框字體加大，防止縮放 */
             .pd-input { font-size: 16px !important; }
             .cycle-cell { font-size: 16px !important; }
             .furc-subcell { font-size: 12px !important; padding: 4px 0; }
             
-            /* 隱藏非必要的列印裝飾，節省手機空間 */
             .clinic-footer { font-size: 14px; margin-top: 10px; }
         }
     </style>
@@ -548,10 +538,9 @@
                         setIsLoading(false);
                     }
                 }
-                // Auto preview is now triggered manually to avoid confusing flows
             };
 
-            // Unified Export Function with Mobile Optimization
+            // Unified Export Function with Mobile Optimization & Preview Mode
             const downloadPDF = async (format) => {
                 const { jsPDF } = window.jspdf;
                 const selector = '.a4-landscape-paper';
@@ -570,26 +559,65 @@
                 element.style.width = '297mm';
                 element.style.maxWidth = 'none';
                 element.style.overflow = 'visible';
-                window.scrollTo(0, 0); // Reset scroll to ensure full capture
+                window.scrollTo(0, 0); 
 
                 try {
                     const canvas = await html2canvas(element, { 
                         scale: 2, 
                         useCORS: true, 
                         backgroundColor: "#ffffff",
-                        windowWidth: 1200 // Simulate desktop width
+                        windowWidth: 1200 
                     });
                     
-                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                    
-                    // Handle JPG Download
+                    // Generate correctly sized output canvas for JPG
+                    let outputCanvas = canvas;
                     if (format.startsWith('jpg')) {
-                        const link = document.createElement('a');
-                        link.download = `${activeTab}_${patientInfo.name}_${format.toUpperCase()}.jpg`;
-                        link.href = imgData;
-                        link.click();
+                        // Create a canvas with ISO sizes at reasonable DPI (e.g. 150 DPI)
+                        // A4 Landscape 150 DPI: 1754 x 1240
+                        // A5 Landscape 150 DPI: 1240 x 874
+                        const dpiScale = 1.5; // Base scale
+                        let targetWidth, targetHeight;
+                        
+                        if (format === 'jpg_a5') {
+                            targetWidth = 1240;
+                            targetHeight = 874;
+                        } else {
+                            targetWidth = 1754;
+                            targetHeight = 1240;
+                        }
+                        
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = targetWidth;
+                        tempCanvas.height = targetHeight;
+                        const ctx = tempCanvas.getContext('2d');
+                        
+                        // Fill white background
+                        ctx.fillStyle = "#ffffff";
+                        ctx.fillRect(0, 0, targetWidth, targetHeight);
+                        
+                        // Draw image scaled to fit
+                        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+                        outputCanvas = tempCanvas;
+                    }
+
+                    const imgData = outputCanvas.toDataURL('image/jpeg', 0.95);
+                    
+                    if (format.startsWith('jpg')) {
+                        // Open JPG in new window
+                        const win = window.open();
+                        if (win) {
+                            win.document.write(
+                                `<html><head><title>預覽 - ${patientInfo.name}</title></head>` +
+                                `<body style="margin:0; display:flex; justify-content:center; align-items:center; background:#525252; min-height:100vh;">` +
+                                `<img src="${imgData}" style="max-width:100%; height:auto; box-shadow: 0 0 10px rgba(0,0,0,0.5);">` +
+                                `</body></html>`
+                            );
+                            win.document.close();
+                        } else {
+                            alert('請允許彈出視窗以預覽圖片');
+                        }
                     } else {
-                        // Handle PDF Download
+                        // Open PDF in new tab
                         let pdf;
                         let pdfW, pdfH;
 
@@ -618,13 +646,16 @@
                         const y = (pdfH - h) / 2;
 
                         pdf.addImage(imgData, 'JPEG', x, y, w, h);
-                        pdf.save(`${activeTab}_${patientInfo.name}_${format.toUpperCase()}.pdf`);
+                        
+                        // Open PDF blob in new window
+                        const blob = pdf.output('blob');
+                        const blobUrl = URL.createObjectURL(blob);
+                        window.open(blobUrl, '_blank');
                     }
                 } catch (err) {
                     console.error("Export failed", err);
                     alert("匯出失敗，請重試");
                 } finally {
-                    // Restore original styles
                     element.style.width = originalStyle.width;
                     element.style.maxWidth = originalStyle.maxWidth;
                     element.style.overflow = originalStyle.overflow;
@@ -695,6 +726,9 @@
             };
 
             const handleFocus = (e) => {
+                // Select all content on focus to facilitate easy overwriting
+                e.target.select();
+                
                 if (window.innerWidth <= 768) {
                     setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
                 }
@@ -1007,16 +1041,16 @@
                         {/* Download Buttons Section */}
                         <div className="flex gap-2 mt-4 border-t pt-4">
                             <button onClick={() => downloadPDF('a4')} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
-                                <span>🖨️ 下載 A4 PDF</span>
+                                <span>開啟 A4 PDF</span>
                             </button>
                             <button onClick={() => downloadPDF('a5')} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
-                                <span>🖨️ 下載 A5 PDF</span>
+                                <span>開啟 A5 PDF</span>
                             </button>
                             <button onClick={() => downloadPDF('jpg_a4')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
-                                <span>🖼️ 下載 JPG (A4)</span>
+                                <span>開啟 JPG (A4)</span>
                             </button>
                             <button onClick={() => downloadPDF('jpg_a5')} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
-                                <span>🖼️ 下載 JPG (A5)</span>
+                                <span>開啟 JPG (A5)</span>
                             </button>
                         </div>
                     </div>
