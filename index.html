@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (RWD + Preview)</title>
+    <title>牙周治療紀錄表 (High Res Export)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -143,21 +143,30 @@
             padding: 0;
             height: 100%;
             vertical-align: middle;
+            overflow: visible; /* Ensure rotated text doesn't get clipped */
         }
         
+        /* 修正後的旋轉標題樣式 (相容 html2canvas) */
         .header-main-inner {
-            writing-mode: vertical-lr; 
-            text-orientation: mixed;
-            letter-spacing: 0px; 
-            font-size: 11px;     
-            font-weight: 900;    
-            width: 100%;
-            height: 100%;
             display: flex;
             align-items: center; 
             justify-content: center; 
+            width: 100%;
+            height: 100%;
             margin: 0 auto;
             text-transform: none;
+            overflow: visible;
+        }
+        
+        .header-main-inner span {
+            display: inline-block;
+            transform: rotate(90deg);
+            white-space: nowrap;
+            font-size: 11px;     
+            font-weight: 900;
+            /* 讓寬度自適應內容，避免被父層限制 */
+            width: auto;
+            height: auto;
         }
         
         .header-sub { 
@@ -540,7 +549,7 @@
                 }
             };
 
-            // Unified Export Function with Mobile Optimization & Preview Mode
+            // Unified Export Function
             const downloadPDF = async (format) => {
                 const { jsPDF } = window.jspdf;
                 const selector = '.a4-landscape-paper';
@@ -548,118 +557,135 @@
                 
                 if(!element) { alert('請先切換到要列印的頁面'); return; }
 
-                // --- Mobile Capture Logic Fix ---
-                const originalStyle = {
-                    width: element.style.width,
-                    maxWidth: element.style.maxWidth,
-                    overflow: element.style.overflow
-                };
+                // 1. Save current order state
+                const savedStartUpper = startUpper;
+                const savedStartLower = startLower;
 
-                // Temporarily force desktop size for capture
-                element.style.width = '297mm';
-                element.style.maxWidth = 'none';
-                element.style.overflow = 'visible';
-                window.scrollTo(0, 0); 
+                // 2. Force Standard Order (18/48)
+                // Using flushSync is generally better but in this single file set up, setTimeout is safer.
+                setStartUpper('18');
+                setStartLower('48');
 
-                try {
-                    const canvas = await html2canvas(element, { 
-                        scale: 2, 
-                        useCORS: true, 
-                        backgroundColor: "#ffffff",
-                        windowWidth: 1200 
-                    });
-                    
-                    // Generate correctly sized output canvas for JPG
-                    let outputCanvas = canvas;
-                    if (format.startsWith('jpg')) {
-                        // Create a canvas with ISO sizes at reasonable DPI (e.g. 150 DPI)
-                        // A4 Landscape 150 DPI: 1754 x 1240
-                        // A5 Landscape 150 DPI: 1240 x 874
-                        const dpiScale = 1.5; // Base scale
-                        let targetWidth, targetHeight;
+                // 3. Wait for Render
+                setTimeout(async () => {
+                    // --- Mobile Capture Logic Fix ---
+                    const originalStyle = {
+                        width: element.style.width,
+                        maxWidth: element.style.maxWidth,
+                        overflow: element.style.overflow
+                    };
+
+                    // Force desktop size for capture
+                    element.style.width = '297mm';
+                    element.style.maxWidth = 'none';
+                    element.style.overflow = 'visible';
+                    window.scrollTo(0, 0); 
+
+                    try {
+                        const captureScale = format.startsWith('jpg') ? 4 : 3;
+
+                        const canvas = await html2canvas(element, { 
+                            scale: captureScale, 
+                            useCORS: true, 
+                            backgroundColor: "#ffffff",
+                            windowWidth: 1200 
+                        });
                         
-                        if (format === 'jpg_a5') {
-                            targetWidth = 1240;
-                            targetHeight = 874;
-                        } else {
-                            targetWidth = 1754;
-                            targetHeight = 1240;
+                        // Generate correctly sized output canvas for JPG
+                        let outputCanvas = canvas;
+                        if (format.startsWith('jpg')) {
+                            // High Resolution 300 DPI for Print
+                            // A4 Landscape 300 DPI: 3508 x 2480
+                            // A5 Landscape 300 DPI: 2480 x 1748
+                            let targetWidth, targetHeight;
+                            
+                            if (format === 'jpg_a5') {
+                                targetWidth = 2480;
+                                targetHeight = 1748;
+                            } else {
+                                targetWidth = 3508;
+                                targetHeight = 2480;
+                            }
+                            
+                            const tempCanvas = document.createElement('canvas');
+                            tempCanvas.width = targetWidth;
+                            tempCanvas.height = targetHeight;
+                            const ctx = tempCanvas.getContext('2d');
+                            
+                            // Fill white background
+                            ctx.fillStyle = "#ffffff";
+                            ctx.fillRect(0, 0, targetWidth, targetHeight);
+                            
+                            // Draw image scaled to fit
+                            ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+                            outputCanvas = tempCanvas;
                         }
+
+                        const imgData = outputCanvas.toDataURL('image/jpeg', 0.95);
                         
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = targetWidth;
-                        tempCanvas.height = targetHeight;
-                        const ctx = tempCanvas.getContext('2d');
-                        
-                        // Fill white background
-                        ctx.fillStyle = "#ffffff";
-                        ctx.fillRect(0, 0, targetWidth, targetHeight);
-                        
-                        // Draw image scaled to fit
-                        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
-                        outputCanvas = tempCanvas;
+                        if (format.startsWith('jpg')) {
+                            // Open JPG in new window
+                            const win = window.open();
+                            if (win) {
+                                win.document.write(
+                                    `<html><head><title>預覽 - ${patientInfo.name}</title></head>` +
+                                    `<body style="margin:0; display:flex; justify-content:center; align-items:center; background:#525252; min-height:100vh;">` +
+                                    `<img src="${imgData}" style="max-width:100%; height:auto; box-shadow: 0 0 10px rgba(0,0,0,0.5);">` +
+                                    `</body></html>`
+                                );
+                                win.document.close();
+                            } else {
+                                alert('請允許彈出視窗以預覽圖片');
+                            }
+                        } else {
+                            // Open PDF in new tab
+                            let pdf;
+                            let pdfW, pdfH;
+
+                            if (format === 'a5') {
+                                pdf = new jsPDF('l', 'mm', 'a5');
+                                pdfW = 210;
+                                pdfH = 148;
+                            } else {
+                                pdf = new jsPDF('l', 'mm', 'a4');
+                                pdfW = 297;
+                                pdfH = 210;
+                            }
+
+                            const imgProps = pdf.getImageProperties(imgData);
+                            const ratio = imgProps.width / imgProps.height;
+                            
+                            let w = pdfW;
+                            let h = w / ratio;
+                            
+                            if (h > pdfH) {
+                                h = pdfH;
+                                w = h * ratio;
+                            }
+                            
+                            const x = (pdfW - w) / 2;
+                            const y = (pdfH - h) / 2;
+
+                            pdf.addImage(imgData, 'JPEG', x, y, w, h);
+                            
+                            // Open PDF blob in new window
+                            const blob = pdf.output('blob');
+                            const blobUrl = URL.createObjectURL(blob);
+                            window.open(blobUrl, '_blank');
+                        }
+                    } catch (err) {
+                        console.error("Export failed", err);
+                        alert("匯出失敗，請重試");
+                    } finally {
+                        // Restore Styles
+                        element.style.width = originalStyle.width;
+                        element.style.maxWidth = originalStyle.maxWidth;
+                        element.style.overflow = originalStyle.overflow;
+                        // Restore Order
+                        setStartUpper(savedStartUpper);
+                        setStartLower(savedStartLower);
                     }
-
-                    const imgData = outputCanvas.toDataURL('image/jpeg', 0.95);
-                    
-                    if (format.startsWith('jpg')) {
-                        // Open JPG in new window
-                        const win = window.open();
-                        if (win) {
-                            win.document.write(
-                                `<html><head><title>預覽 - ${patientInfo.name}</title></head>` +
-                                `<body style="margin:0; display:flex; justify-content:center; align-items:center; background:#525252; min-height:100vh;">` +
-                                `<img src="${imgData}" style="max-width:100%; height:auto; box-shadow: 0 0 10px rgba(0,0,0,0.5);">` +
-                                `</body></html>`
-                            );
-                            win.document.close();
-                        } else {
-                            alert('請允許彈出視窗以預覽圖片');
-                        }
-                    } else {
-                        // Open PDF in new tab
-                        let pdf;
-                        let pdfW, pdfH;
-
-                        if (format === 'a5') {
-                            pdf = new jsPDF('l', 'mm', 'a5');
-                            pdfW = 210;
-                            pdfH = 148;
-                        } else {
-                            pdf = new jsPDF('l', 'mm', 'a4');
-                            pdfW = 297;
-                            pdfH = 210;
-                        }
-
-                        const imgProps = pdf.getImageProperties(imgData);
-                        const ratio = imgProps.width / imgProps.height;
-                        
-                        let w = pdfW;
-                        let h = w / ratio;
-                        
-                        if (h > pdfH) {
-                            h = pdfH;
-                            w = h * ratio;
-                        }
-                        
-                        const x = (pdfW - w) / 2;
-                        const y = (pdfH - h) / 2;
-
-                        pdf.addImage(imgData, 'JPEG', x, y, w, h);
-                        
-                        // Open PDF blob in new window
-                        const blob = pdf.output('blob');
-                        const blobUrl = URL.createObjectURL(blob);
-                        window.open(blobUrl, '_blank');
-                    }
-                } catch (err) {
-                    console.error("Export failed", err);
-                    alert("匯出失敗，請重試");
-                } finally {
-                    element.style.width = originalStyle.width;
-                    element.style.maxWidth = originalStyle.maxWidth;
-                    element.style.overflow = originalStyle.overflow;
-                }
+                }, 100); // Wait for React
             };
 
             const toggleMissing = (id) => setData(prev => ({ ...prev, [id]: { ...prev[id], missing: !prev[id].missing } }));
@@ -854,7 +880,8 @@
 
             const renderControls = (isUpper) => {
                 return (
-                    <div className="header-control">
+                    // data-html2canvas-ignore will hide this entire div during export
+                    <div className="header-control" data-html2canvas-ignore="true">
                         <span className="mr-2 opacity-80">起始:</span>
                         <label className="header-radio"><input type="radio" checked={isUpper ? startUpper==='18' : startLower==='48'} onChange={()=> isUpper ? setStartUpper('18') : setStartLower('48')} /> {isUpper ? '18(右)' : '48(右)'}</label>
                         <label className="header-radio ml-3"><input type="radio" checked={isUpper ? startUpper==='28' : startLower==='38'} onChange={()=> isUpper ? setStartUpper('28') : setStartLower('38')} /> {isUpper ? '28(左)' : '38(左)'}</label>
@@ -889,14 +916,14 @@
                         <table className="perio-table">
                             <colgroup><col className="col-header-main" /><col className="col-header-sub" />{getUpperTeeth().map(t => <col key={t} width="*" />)}</colgroup>
                             <tbody>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Mobility</div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Mobility</span></div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">術後 (Post)</td>{getUpperTeeth().map(id => <td key={`mob-re-${id}`}>{renderMobilityCell(id, 'reeval')}</td>)}</tr>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Furcation</div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Furcation</span></div></td><td className="header-sub">術前 (Pre)</td>{getUpperTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">術後 (Post)</td>{getUpperTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Buccal</div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Buccal</span></div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
                                 <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
-                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner">Palatal</div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
+                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Palatal</span></div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
                             </tbody>
                         </table>
@@ -909,14 +936,14 @@
                         <table className="perio-table">
                             <colgroup><col className="col-header-main" /><col className="col-header-sub" />{getLowerTeeth().map(t => <col key={t} width="*" />)}</colgroup>
                             <tbody>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Mobility</div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Mobility</span></div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`mob-init-${id}`}>{renderMobilityCell(id, 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">術後 (Post)</td>{getLowerTeeth().map(id => <td key={`mob-re-${id}`}>{renderMobilityCell(id, 'reeval')}</td>)}</tr>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Furcation</div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Furcation</span></div></td><td className="header-sub">術前 (Pre)</td>{getLowerTeeth().map(id => <td key={`furc-init-${id}`}>{renderFurcationCell(id, 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">術後 (Post)</td>{getLowerTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
-                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner">Lingual</div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
+                                <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Lingual</span></div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
                                 <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
-                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner">Buccal</div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
+                                <tr><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Buccal</span></div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
                             </tbody>
                         </table>
