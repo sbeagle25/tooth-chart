@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (RWD + A4/A5 Export)</title>
+    <title>牙周治療紀錄表 (RWD + A4/A5/JPG Export)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -53,10 +53,10 @@
             padding: 20px;
         }
         
-        /* --- 電腦版樣式 (模擬紙張) --- */
+        /* RWD A4 Container */
         .a4-landscape-paper {
             width: 100%;
-            max-width: 297mm; /* 限制最大寬度為 A4 */
+            max-width: 297mm; 
             min-height: 210mm;
             background: white;
             margin: 0 auto 30px auto;
@@ -68,26 +68,277 @@
             flex-direction: column;
         }
 
+        @media print {
+            @page { size: landscape; margin: 0; }
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .a4-landscape-paper {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                max-width: none;
+                height: 100vh;
+                page-break-after: always;
+                padding: 5mm 10mm;
+            }
+            .a4-landscape-paper:last-child { page-break-after: auto; }
+            /* 列印時隱藏捲軸，強制顯示所有內容 */
+            .chart-container { overflow: visible !important; } 
+            .perio-table { min-width: 0 !important; width: 100% !important; }
+        }
+        
         .chart-container { 
             width: 100%;
+            overflow: hidden; 
             background: white; 
             border: 2px solid #000; 
             padding: 5px; 
             box-shadow: none; 
             margin-bottom: 15px;
-            /* 電腦版預設不捲動，嘗試縮放 */
-            overflow: hidden; 
         }
-
+        
         .perio-table { 
             border-collapse: collapse; 
             width: 100%; 
             table-layout: fixed; 
             font-size: 11px;
         }
+        
+        .perio-table th, .perio-table td { 
+            border: 1px solid #000; 
+            text-align: center; 
+            vertical-align: middle; 
+            height: 38px; 
+            padding: 0; 
+        }
 
-        /* --- 手機版樣式優化 (Mobile Responsive) --- */
+        /* Compact styles for Plaque Record */
+        .plaque-compact .chart-container {
+            margin-bottom: 5px;
+            padding: 2px;
+            border: 1px solid #000;
+        }
+        .plaque-compact .perio-table td {
+            height: 24px; 
+            font-size: 10px;
+        }
+        .plaque-compact .tooth-row {
+            height: 20px;
+            font-size: 11px;
+        }
+        .plaque-compact .header-sub {
+            padding: 0 1px;
+            font-size: 10px;
+        }
+        .plaque-compact .indicator-box {
+            width: 10px;
+            height: 10px;
+        }
+        
+        .col-header-main { width: 40px; } 
+        .col-header-sub { width: 90px; } 
+
+        .header-main { 
+            background-color: #e5e7eb; 
+            color: #000000; 
+            padding: 0;
+            height: 100%;
+            vertical-align: middle;
+        }
+        
+        .header-main-inner {
+            writing-mode: vertical-lr; 
+            text-orientation: mixed;
+            letter-spacing: 0px; 
+            font-size: 11px;     
+            font-weight: 900;    
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center; 
+            justify-content: center; 
+            margin: 0 auto;
+            text-transform: none;
+        }
+        
+        .header-sub { 
+            background-color: #f3f4f6; 
+            font-weight: 700; 
+            color: #000000; 
+            font-size: 11px; 
+            white-space: nowrap; 
+            padding: 0 1px;
+        }
+
+        .tooth-row { 
+            background-color: #000000; 
+            color: #ffffff; 
+            font-weight: bold; 
+            height: 28px; 
+            font-size: 13px; 
+        }
+        .tooth-cell { 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px; 
+            font-weight: 700;
+        }
+        .tooth-cell:hover { background-color: #4b5563; }
+        .tooth-cell.missing { color: #d1d5db; text-decoration: line-through; background-color: #374151; }
+
+        .cycle-cell { 
+            cursor: pointer; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; 
+            font-weight: bold; font-size: 14px; user-select: none; color: #000;
+        }
+        .cycle-cell:hover { background-color: #e5e7eb; }
+        .cycle-val-3 { color: #dc2626; background-color: #fee2e2; } 
+
+        .furc-container { display: flex; width: 100%; height: 100%; }
+        .furc-subcell { 
+            flex: 1; border-right: 1px solid #d1d5db; display: flex; align-items: center; justify-content: center; 
+            font-size: 10px; font-weight: bold; cursor: pointer; color: #9ca3af;
+        }
+        .furc-subcell.val-active { color: #000000; font-size: 12px; font-weight: 900; }
+        .furc-subcell:last-child { border-right: none; }
+        .furc-subcell:hover { background-color: #f3f4f6; }
+
+        .pd-input { 
+            width: 100%; height: 100%; text-align: center; border: none; background: transparent; 
+            font-size: 13px; 
+            font-weight: 700; font-family: 'Roboto Mono', monospace; color: #000;
+            padding: 0; margin: 0;
+        }
+        .pd-input:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
+        .val-danger { color: #dc2626; font-weight: 900; }
+
+        .indicator-row { display: flex; justify-content: center; align-items: center; gap: 2px; height: 100%; }
+        .indicator-box { width: 12px; height: 12px; border: 1px solid #9ca3af; border-radius: 2px; cursor: pointer; }
+        .plaque-active { background-color: #2563eb; border-color: #2563eb; }
+
+        .missing-cell { background: repeating-linear-gradient(45deg, #e5e7eb, #e5e7eb 5px, #ffffff 5px, #ffffff 10px); pointer-events: none; opacity: 0.8; }
+        
+        .border-thick-top { border-top: 2px solid #000 !important; }
+        .border-thick-bottom { border-bottom: 2px solid #000 !important; }
+        .bg-init { background-color: #fff; }
+        .bg-reeval { background-color: #f9fafb; }
+
+        .tab-btn { padding: 10px 20px; font-weight: bold; border-radius: 8px 8px 0 0; cursor: pointer; border: 1px solid transparent; margin-right: 4px; font-size: 14px; }
+        .tab-btn.active { background-color: white; color: #000; border-color: transparent; z-index: 10; margin-bottom: -1px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
+        .tab-btn.inactive { background-color: #404040; color: #d1d5db; border-color: transparent; }
+        
+        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.9); color: white; padding: 12px 24px; border-radius: 50px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; font-weight: 500; }
+        .toast.show { opacity: 1; }
+
+        .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; }
+
+        /* Summary Box */
+        .summary-box {
+            margin-top: 5px;
+            margin-bottom: 10px;
+            border: 2px solid #000;
+            padding: 5px;
+            background-color: #f8fafc;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .plaque-compact .summary-box {
+            margin-top: 2px;
+            margin-bottom: 5px;
+            padding: 3px;
+            gap: 5px;
+        }
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px; 
+        }
+        .summary-label {
+            font-size: 11px;
+            color: #4b5563;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .summary-value {
+            font-size: 16px;
+            font-weight: 900;
+            color: #000;
+        }
+        .summary-value.highlight {
+            color: #dc2626;
+        }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 999; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; max-width: 95vw; max-height: 95vh; overflow: auto; display: flex; flex-col; gap: 4; }
+        .preview-img { max-width: 100%; border: 1px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .header-control { 
+            display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: normal; 
+            background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px;
+        }
+        .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
+        .header-radio input { cursor: pointer; }
+
+        /* Plaque Record Styles */
+        .plaque-record-unit {
+            /* Styles for individual record inside the page */
+            margin-bottom: 10mm;
+            padding-bottom: 5mm;
+            border-bottom: 2px dashed #ccc;
+        }
+        .plaque-record-unit:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .date-input-custom {
+            background: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .date-input-custom::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+
+        /* Patient Info Header Styles */
+        .patient-info-header {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #000;
+            padding: 0 8px;
+            margin-bottom: 8px;
+        }
+        .patient-info-header span {
+            white-space: nowrap;
+        }
+        .plaque-compact .patient-info-header {
+            color: #1e40af; /* Blue for Plaque Record */
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+        
+        /* 手機上單欄顯示病患資料，避免擠壓 */
         @media screen and (max-width: 768px) {
+            .patient-info-header {
+                grid-template-columns: 1fr 1fr;
+                gap: 4px;
+                font-size: 14px;
+            }
+            .patient-info-header span {
+                white-space: normal;
+            }
+            /* 手機版樣式優化 (Mobile Responsive) */
             body { 
                 padding: 10px; 
                 background-color: #f3f4f6; /* 手機版背景改淺色 */
@@ -122,118 +373,6 @@
             
             /* 隱藏非必要的列印裝飾，節省手機空間 */
             .clinic-footer { font-size: 14px; margin-top: 10px; }
-        }
-
-        /* --- 列印設定 (Print) --- */
-        @media print {
-            @page { size: landscape; margin: 0; }
-            body { background: white; padding: 0; }
-            .no-print { display: none !important; }
-            .a4-landscape-paper {
-                box-shadow: none;
-                margin: 0;
-                width: 100%;
-                max-width: none;
-                height: 100vh;
-                page-break-after: always;
-                padding: 5mm 10mm;
-            }
-            .a4-landscape-paper:last-child { page-break-after: auto; }
-            /* 列印時隱藏捲軸，強制顯示所有內容 */
-            .chart-container { overflow: visible !important; } 
-            .perio-table { min-width: 0 !important; width: 100% !important; }
-        }
-        
-        .perio-table th, .perio-table td { 
-            border: 1px solid #000; 
-            text-align: center; 
-            vertical-align: middle; 
-            height: 38px; 
-            padding: 0; 
-        }
-
-        /* Compact styles for Plaque Record */
-        .plaque-compact .chart-container { margin-bottom: 5px; padding: 2px; border: 1px solid #000; }
-        .plaque-compact .perio-table td { height: 24px; font-size: 10px; }
-        .plaque-compact .tooth-row { height: 20px; font-size: 11px; }
-        .plaque-compact .header-sub { padding: 0 1px; font-size: 10px; }
-        .plaque-compact .indicator-box { width: 10px; height: 10px; }
-        
-        .col-header-main { width: 40px; } 
-        .col-header-sub { width: 90px; } 
-
-        .header-main { background-color: #e5e7eb; color: #000000; padding: 0; height: 100%; vertical-align: middle; }
-        .header-main-inner { writing-mode: vertical-lr; text-orientation: mixed; letter-spacing: 0px; font-size: 11px; font-weight: 900; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; margin: 0 auto; text-transform: none; }
-        .header-sub { background-color: #f3f4f6; font-weight: 700; color: #000000; font-size: 11px; white-space: nowrap; padding: 0 1px; }
-
-        .tooth-row { background-color: #000000; color: #ffffff; font-weight: bold; height: 28px; font-size: 13px; }
-        .tooth-cell { cursor: pointer; transition: background-color 0.2s; font-family: 'Roboto Mono', monospace; font-size: 14px; font-weight: 700; }
-        .tooth-cell:hover { background-color: #4b5563; }
-        .tooth-cell.missing { color: #d1d5db; text-decoration: line-through; background-color: #374151; }
-
-        .cycle-cell { cursor: pointer; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; user-select: none; color: #000; }
-        .cycle-cell:hover { background-color: #e5e7eb; }
-        .cycle-val-3 { color: #dc2626; background-color: #fee2e2; } 
-
-        .furc-container { display: flex; width: 100%; height: 100%; }
-        .furc-subcell { flex: 1; border-right: 1px solid #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; cursor: pointer; color: #9ca3af; }
-        .furc-subcell.val-active { color: #000000; font-size: 12px; font-weight: 900; }
-        .furc-subcell:last-child { border-right: none; }
-        .furc-subcell:hover { background-color: #f3f4f6; }
-
-        .pd-input { width: 100%; height: 100%; text-align: center; border: none; background: transparent; font-size: 13px; font-weight: 700; font-family: 'Roboto Mono', monospace; color: #000; padding: 0; margin: 0; }
-        .pd-input:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
-        .val-danger { color: #dc2626; font-weight: 900; }
-
-        .indicator-row { display: flex; justify-content: center; align-items: center; gap: 2px; height: 100%; }
-        .indicator-box { width: 12px; height: 12px; border: 1px solid #9ca3af; border-radius: 2px; cursor: pointer; }
-        .plaque-active { background-color: #2563eb; border-color: #2563eb; }
-
-        .missing-cell { background: repeating-linear-gradient(45deg, #e5e7eb, #e5e7eb 5px, #ffffff 5px, #ffffff 10px); pointer-events: none; opacity: 0.8; }
-        
-        .border-thick-top { border-top: 2px solid #000 !important; }
-        .border-thick-bottom { border-bottom: 2px solid #000 !important; }
-        .bg-init { background-color: #fff; }
-        .bg-reeval { background-color: #f9fafb; }
-
-        .tab-btn { padding: 10px 20px; font-weight: bold; border-radius: 8px 8px 0 0; cursor: pointer; border: 1px solid transparent; margin-right: 4px; font-size: 14px; }
-        .tab-btn.active { background-color: white; color: #000; border-color: transparent; z-index: 10; margin-bottom: -1px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
-        .tab-btn.inactive { background-color: #404040; color: #d1d5db; border-color: transparent; }
-        
-        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.9); color: white; padding: 12px 24px; border-radius: 50px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; font-weight: 500; }
-        .toast.show { opacity: 1; }
-
-        .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; }
-
-        .summary-box { margin-top: 5px; margin-bottom: 10px; border: 2px solid #000; padding: 5px; background-color: #f8fafc; display: flex; justify-content: space-around; flex-wrap: wrap; gap: 10px; }
-        .plaque-compact .summary-box { margin-top: 2px; margin-bottom: 5px; padding: 3px; gap: 5px; }
-        .summary-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
-        .summary-label { font-size: 11px; color: #4b5563; font-weight: 700; margin-bottom: 2px; }
-        .summary-value { font-size: 16px; font-weight: 900; color: #000; }
-        .summary-value.highlight { color: #dc2626; }
-
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 999; }
-        .modal-content { background: white; padding: 20px; border-radius: 8px; max-width: 95vw; max-height: 95vh; overflow: auto; display: flex; flex-col; gap: 4; }
-        .preview-img { max-width: 100%; border: 1px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        
-        .header-control { display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: normal; background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px; }
-        .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
-        .header-radio input { cursor: pointer; }
-
-        .plaque-record-unit { margin-bottom: 10mm; padding-bottom: 5mm; border-bottom: 2px dashed #ccc; }
-        .plaque-record-unit:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
-        
-        .date-input-custom { background: transparent; border: 1px solid white; color: white; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
-        .date-input-custom::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
-
-        .patient-info-header { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 12px; font-size: 12px; font-weight: 700; color: #000; padding: 0 8px; margin-bottom: 8px; }
-        .patient-info-header span { white-space: nowrap; }
-        .plaque-compact .patient-info-header { color: #1e40af; margin-bottom: 4px; font-size: 11px; }
-        
-        /* 手機上單欄顯示病患資料，避免擠壓 */
-        @media screen and (max-width: 768px) {
-            .patient-info-header { grid-template-columns: 1fr 1fr; gap: 4px; font-size: 14px; }
-            .patient-info-header span { white-space: normal; }
         }
     </style>
 </head>
@@ -431,6 +570,13 @@
                         pdf = new jsPDF('l', 'mm', 'a5');
                         pdfW = 210;
                         pdfH = 148;
+                    } else if (format === 'jpg') {
+                        // JPG Export
+                        const link = document.createElement('a');
+                        link.download = `${activeTab}_${patientInfo.name}.jpg`;
+                        link.href = imgData;
+                        link.click();
+                        return; // Exit here for JPG
                     } else {
                         // A4 Landscape: 297mm x 210mm
                         pdf = new jsPDF('l', 'mm', 'a4');
@@ -475,14 +621,23 @@
 
             const updatePD = (id, surface, stage, index, value) => {
                 if (data[id].missing) return;
-                if (value.length > 1) value = value.slice(-1);
+                
+                // Allow direct overwrite if inputting a single digit
+                // If current value is not empty, replace it with new digit.
+                if (value.length > 1) {
+                    value = value.slice(-1); // Take the last entered character
+                }
+                
                 if (!/^[0-9]?$/.test(value)) return;
+                
                 setData(prev => {
                     const newData = { ...prev };
                     newData[id][surface].pd[stage] = [...prev[id][surface].pd[stage]];
                     newData[id][surface].pd[stage][index] = value;
                     return newData;
                 });
+                
+                // If a digit was entered (length 1), move to next
                 if (value.length === 1) handleNavigate(id, surface, stage, index, 'next');
             };
 
@@ -621,7 +776,7 @@
                     <div className="flex h-full">
                         {[0, 1, 2].map(i => (
                             <div key={i} className="flex-1 border-r last:border-r-0 border-gray-300">
-                                <input id={`pd-${id}-${surface}-${stage}-${i}`} className={`pd-input ${parseInt(vals[i])>=5?'val-danger':''}`} type="tel" inputMode="numeric" pattern="[0-9]*" maxLength="1" enterKeyHint="next" value={vals[i]} onChange={(e)=>updatePD(id, surface, stage, i, e.target.value)} onKeyDown={(e)=>handleKeyDown(e, id, surface, stage, i)} onFocus={handleFocus} autoComplete="off" />
+                                <input id={`pd-${id}-${surface}-${stage}-${i}`} className={`pd-input ${parseInt(vals[i])>=5?'val-danger':''}`} type="tel" inputMode="numeric" pattern="[0-9]*" maxLength="2" enterKeyHint="next" value={vals[i]} onChange={(e)=>updatePD(id, surface, stage, i, e.target.value)} onKeyDown={(e)=>handleKeyDown(e, id, surface, stage, i)} onFocus={handleFocus} autoComplete="off" />
                             </div>
                         ))}
                     </div>
@@ -833,6 +988,9 @@
                             <button onClick={() => downloadPDF('a5')} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
                                 <span>🖨️ 下載 A5 PDF</span>
                             </button>
+                            <button onClick={() => downloadPDF('jpg')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-sm">
+                                <span>🖼️ 下載 JPG</span>
+                            </button>
                         </div>
                     </div>
 
@@ -853,6 +1011,7 @@
                                     <div className="flex gap-2">
                                         <button onClick={() => downloadPDF('a4')} className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700">A4 PDF</button>
                                         <button onClick={() => downloadPDF('a5')} className="bg-orange-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-orange-700">A5 PDF</button>
+                                        <button onClick={() => downloadPDF('jpg')} className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700">JPG</button>
                                         <button onClick={() => setPreviewImg(null)} className="bg-gray-500 text-white px-3 py-1 rounded text-sm font-bold hover:bg-gray-600">關閉</button>
                                     </div>
                                 </div>
