@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (High Res Export)</title>
+    <title>牙周治療紀錄表 (Center Alignment Fix)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -53,6 +53,16 @@
             padding: 20px;
         }
         
+        /* 核心置中修正樣式 (Flexbox Centering) */
+        .cell-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            line-height: 1; /* 重要：防止字體行高造成的偏移 */
+        }
+
         /* RWD A4 Container */
         .a4-landscape-paper {
             width: 100%;
@@ -143,10 +153,10 @@
             padding: 0;
             height: 100%;
             vertical-align: middle;
-            overflow: visible; /* Ensure rotated text doesn't get clipped */
+            overflow: visible;
         }
         
-        /* 修正後的旋轉標題樣式 (相容 html2canvas) */
+        /* 修正後的旋轉標題樣式 */
         .header-main-inner {
             display: flex;
             align-items: center; 
@@ -164,7 +174,6 @@
             white-space: nowrap;
             font-size: 11px;     
             font-weight: 900;
-            /* 讓寬度自適應內容，避免被父層限制 */
             width: auto;
             height: auto;
         }
@@ -240,7 +249,6 @@
 
         .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; }
 
-        /* Summary Box */
         .summary-box {
             margin-top: 5px;
             margin-bottom: 10px;
@@ -562,20 +570,17 @@
                 const savedStartLower = startLower;
 
                 // 2. Force Standard Order (18/48)
-                // Using flushSync is generally better but in this single file set up, setTimeout is safer.
                 setStartUpper('18');
                 setStartLower('48');
 
                 // 3. Wait for Render
                 setTimeout(async () => {
-                    // --- Mobile Capture Logic Fix ---
                     const originalStyle = {
                         width: element.style.width,
                         maxWidth: element.style.maxWidth,
                         overflow: element.style.overflow
                     };
 
-                    // Force desktop size for capture
                     element.style.width = '297mm';
                     element.style.maxWidth = 'none';
                     element.style.overflow = 'visible';
@@ -591,12 +596,8 @@
                             windowWidth: 1200 
                         });
                         
-                        // Generate correctly sized output canvas for JPG
                         let outputCanvas = canvas;
                         if (format.startsWith('jpg')) {
-                            // High Resolution 300 DPI for Print
-                            // A4 Landscape 300 DPI: 3508 x 2480
-                            // A5 Landscape 300 DPI: 2480 x 1748
                             let targetWidth, targetHeight;
                             
                             if (format === 'jpg_a5') {
@@ -612,11 +613,9 @@
                             tempCanvas.height = targetHeight;
                             const ctx = tempCanvas.getContext('2d');
                             
-                            // Fill white background
                             ctx.fillStyle = "#ffffff";
                             ctx.fillRect(0, 0, targetWidth, targetHeight);
                             
-                            // Draw image scaled to fit
                             ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
                             outputCanvas = tempCanvas;
                         }
@@ -624,7 +623,6 @@
                         const imgData = outputCanvas.toDataURL('image/jpeg', 0.95);
                         
                         if (format.startsWith('jpg')) {
-                            // Open JPG in new window
                             const win = window.open();
                             if (win) {
                                 win.document.write(
@@ -638,7 +636,6 @@
                                 alert('請允許彈出視窗以預覽圖片');
                             }
                         } else {
-                            // Open PDF in new tab
                             let pdf;
                             let pdfW, pdfH;
 
@@ -668,7 +665,6 @@
 
                             pdf.addImage(imgData, 'JPEG', x, y, w, h);
                             
-                            // Open PDF blob in new window
                             const blob = pdf.output('blob');
                             const blobUrl = URL.createObjectURL(blob);
                             window.open(blobUrl, '_blank');
@@ -677,15 +673,13 @@
                         console.error("Export failed", err);
                         alert("匯出失敗，請重試");
                     } finally {
-                        // Restore Styles
                         element.style.width = originalStyle.width;
                         element.style.maxWidth = originalStyle.maxWidth;
                         element.style.overflow = originalStyle.overflow;
-                        // Restore Order
                         setStartUpper(savedStartUpper);
                         setStartLower(savedStartLower);
                     }
-                }, 100); // Wait for React
+                }, 100);
             };
 
             const toggleMissing = (id) => setData(prev => ({ ...prev, [id]: { ...prev[id], missing: !prev[id].missing } }));
@@ -706,7 +700,6 @@
             const updatePD = (id, surface, stage, index, value) => {
                 if (data[id].missing) return;
                 
-                // Allow direct overwrite logic
                 if (value.length > 1) {
                     value = value.slice(-1); 
                 }
@@ -752,9 +745,7 @@
             };
 
             const handleFocus = (e) => {
-                // Select all content on focus to facilitate easy overwriting
                 e.target.select();
-                
                 if (window.innerWidth <= 768) {
                     setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
                 }
@@ -910,7 +901,7 @@
                     </div>
 
                     <div className="chart-container">
-                        <div className="bg-black text-white p-1 font-bold rounded-t flex justify-between items-center px-2 border border-black text-sm">
+                        <div className="bg-black text-white h-8 flex items-center px-2 border border-black text-sm justify-between">
                             <span>Maxilla (上顎)</span>{renderControls(true)}
                         </div>
                         <table className="perio-table">
@@ -922,7 +913,7 @@
                                 <tr><td className="header-sub">術後 (Post)</td>{getUpperTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
                                 <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Buccal</span></div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
-                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2"><div className="cell-center">牙位 / Tooth NO.</div></td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}><div className="cell-center">{id}</div></td>))}</tr>
                                 <tr><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Palatal</span></div></td><td className="header-sub">探測深度(術前)</td>{getUpperTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getUpperTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
                             </tbody>
@@ -930,7 +921,7 @@
                     </div>
 
                     <div className="chart-container">
-                        <div className="bg-black text-white p-1 font-bold rounded-t flex justify-between items-center px-2 border border-black text-sm">
+                        <div className="bg-black text-white h-8 flex items-center px-2 border border-black text-sm justify-between">
                             <span>Mandible (下顎)</span>{renderControls(false)}
                         </div>
                         <table className="perio-table">
@@ -942,7 +933,7 @@
                                 <tr><td className="header-sub">術後 (Post)</td>{getLowerTeeth().map(id => <td key={`furc-re-${id}`}>{renderFurcationCell(id, 'reeval')}</td>)}</tr>
                                 <tr className="border-thick-top"><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Lingual</span></div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s1-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'buccal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s1-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'buccal', 'reeval')}</td>)}</tr>
-                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2">牙位 / Tooth NO.</td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                <tr className="tooth-row border-thick-top border-thick-bottom"><td colSpan="2"><div className="cell-center">牙位 / Tooth NO.</div></td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}><div className="cell-center">{id}</div></td>))}</tr>
                                 <tr><td rowSpan="2" className="header-main"><div className="header-main-inner"><span>Buccal</span></div></td><td className="header-sub">探測深度(術前)</td>{getLowerTeeth().map(id => <td key={`s2-pd-init-${id}`} className="bg-init">{renderPDInputs(id, 'palatal', 'initial')}</td>)}</tr>
                                 <tr><td className="header-sub">探測深度(術後)</td>{getLowerTeeth().map(id => <td key={`s2-pd-re-${id}`} className="bg-reeval">{renderPDInputs(id, 'palatal', 'reeval')}</td>)}</tr>
                             </tbody>
@@ -1000,7 +991,7 @@
                                                     <colgroup><col width="130" />{getUpperTeeth().map(t => <col key={t} width="*" />)}</colgroup>
                                                     <tbody>
                                                         <tr><td className="header-sub font-bold text-blue-600">Buccal (頰)</td>{getUpperTeeth().map(id => <td key={`s1-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'buccal')}</td>)}</tr>
-                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td>牙位 / NO.</td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td><div className="cell-center">牙位 / NO.</div></td>{getUpperTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}><div className="cell-center">{id}</div></td>))}</tr>
                                                         <tr><td className="header-sub font-bold text-blue-600">Palatal (顎)</td>{getUpperTeeth().map(id => <td key={`s2-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'palatal')}</td>)}</tr>
                                                     </tbody>
                                                 </table>
@@ -1014,7 +1005,7 @@
                                                     <colgroup><col width="130" />{getLowerTeeth().map(t => <col key={t} width="*" />)}</colgroup>
                                                     <tbody>
                                                         <tr><td className="header-sub font-bold text-blue-600">Lingual (舌)</td>{getLowerTeeth().map(id => <td key={`s1-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'buccal')}</td>)}</tr>
-                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td>牙位 / NO.</td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}>{id}</td>))}</tr>
+                                                        <tr className="tooth-row border-thick-top border-thick-bottom" style={{backgroundColor: '#1e40af'}}><td><div className="cell-center">牙位 / NO.</div></td>{getLowerTeeth().map(id => (<td key={id} className={`tooth-cell ${data[id].missing?'missing':''}`} onClick={()=>toggleMissing(id)}><div className="cell-center">{id}</div></td>))}</tr>
                                                         <tr><td className="header-sub font-bold text-blue-600">Buccal (頰)</td>{getLowerTeeth().map(id => <td key={`s2-plq-${id}`}>{renderPlaqueRow(actualIdx, id, 'palatal')}</td>)}</tr>
                                                     </tbody>
                                                 </table>
