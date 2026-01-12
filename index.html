@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (Local & Multi-Clinic)</title>
+    <title>牙周治療紀錄表 (iOS Safari Fix)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -45,11 +45,10 @@
                 45deg,
                 transparent,
                 transparent 5px,
-                rgba(150, 150, 150, 0.5) 5px, /* 灰色半透明線條 */
+                rgba(150, 150, 150, 0.5) 5px,
                 rgba(150, 150, 150, 0.5) 10px
             );
-            pointer-events: none;
-            z-index: 10;
+            color: #fff;
         }
         .tooth-cell.missing {
             color: #d1d5db;
@@ -324,6 +323,7 @@
             const [patientInfo, setPatientInfo] = useState({ name: '', id: '', idNumber: '', gender: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
             const [activeTab, setActiveTab] = useState('chart');
             const [toastMsg, setToastMsg] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
             const [startUpper, setStartUpper] = useState('18');
             const [startLower, setStartLower] = useState('48');
             const [previewImg, setPreviewImg] = useState(null);
@@ -383,7 +383,6 @@
                     alert("請選擇診所");
                     return;
                 }
-                // Store the displayed name, but internal logic uses state
                 if (clinicName === 'other') setClinicName(finalName); 
                 setIsStarted(true);
             };
@@ -403,7 +402,7 @@
                     if(json.plaqueRecords) setPlaqueRecords(json.plaqueRecords);
                     if(json.clinicName) {
                          setClinicName(json.clinicName);
-                         setCustomClinicName(json.clinicName); // Sync custom input just in case
+                         setCustomClinicName(json.clinicName);
                     }
                     
                     setFileHandle(handle);
@@ -423,23 +422,37 @@
                         info: patientInfo,
                         data: data,
                         plaqueRecords: plaqueRecords,
-                        clinicName: clinicName, // Save clinic name
+                        clinicName: clinicName,
                         lastModified: new Date().toISOString()
                     };
-                    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
-                    let handle = fileHandle;
-                    if (saveAs || !handle) {
-                        const suggestedName = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
-                        handle = await window.showSaveFilePicker({
-                            suggestedName: suggestedName,
-                            types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
-                        });
-                        setFileHandle(handle);
+                    
+                    // 1. 如果瀏覽器支援 File System Access API
+                    if ('showSaveFilePicker' in window) {
+                        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
+                        let handle = fileHandle;
+                        if (saveAs || !handle) {
+                            const suggestedName = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
+                            handle = await window.showSaveFilePicker({
+                                suggestedName: suggestedName,
+                                types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
+                            });
+                            setFileHandle(handle);
+                        }
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        showToast("💾 儲存成功！");
+                    } else {
+                        // 2. iOS / Android Fallback: 傳統下載
+                        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+                        const downloadAnchorNode = document.createElement('a');
+                        downloadAnchorNode.setAttribute("href", dataStr);
+                        downloadAnchorNode.setAttribute("download", `${patientInfo.id}_${patientInfo.name || 'record'}.json`);
+                        document.body.appendChild(downloadAnchorNode);
+                        downloadAnchorNode.click();
+                        downloadAnchorNode.remove();
+                        showToast("💾 檔案已下載");
                     }
-                    const writable = await handle.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
-                    showToast("💾 儲存成功！");
                 } catch (err) {
                     if (err.name !== 'AbortError') { console.error(err); alert("儲存失敗"); }
                 }
@@ -451,7 +464,7 @@
                     setData(initialData);
                     setPlaqueRecords([createNewPlaqueRecord(initialData)]);
                     setPatientInfo({ name: '', id: '', idNumber: '', gender: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
-                    setIsStarted(false); // Go back to start screen to select clinic again if needed
+                    setIsStarted(false);
                 }
             };
 
@@ -461,20 +474,33 @@
                 const element = document.querySelector(selector);
                 if(!element) { alert('請先切換到要列印的頁面'); return; }
 
-                setIsExporting(true); // Switch to text mode for export
+                setIsExporting(true);
                 const savedStartUpper = startUpper;
                 const savedStartLower = startLower;
                 setStartUpper('18');
                 setStartLower('48');
 
                 setTimeout(async () => {
+                    // Mobile Fix: Force styles before capture
                     const originalStyle = { width: element.style.width, maxWidth: element.style.maxWidth, overflow: element.style.overflow };
-                    element.style.width = '297mm'; element.style.maxWidth = 'none'; element.style.overflow = 'visible';
+                    
+                    // Force desktop size/layout
+                    element.style.width = '297mm'; 
+                    element.style.maxWidth = 'none'; 
+                    element.style.minWidth = '1123px'; // Force minimum width for mobile
+                    element.style.overflow = 'visible';
                     window.scrollTo(0, 0); 
 
                     try {
                         const captureScale = format.startsWith('jpg') ? 4 : 3;
-                        const canvas = await html2canvas(element, { scale: captureScale, useCORS: true, backgroundColor: "#ffffff", windowWidth: 1200 });
+                        const canvas = await html2canvas(element, { 
+                            scale: captureScale, 
+                            useCORS: true, 
+                            backgroundColor: "#ffffff", 
+                            windowWidth: 1280, // Simulate Desktop Width
+                            width: 1280,      // Explicit width for mobile
+                            height: element.scrollHeight
+                        });
                         
                         let outputCanvas = canvas;
                         if (format.startsWith('jpg')) {
@@ -506,9 +532,11 @@
                     } catch (err) {
                         console.error("Export failed", err);
                     } finally {
+                        // Restore
                         element.style.width = originalStyle.width;
                         element.style.maxWidth = originalStyle.maxWidth;
                         element.style.overflow = originalStyle.overflow;
+                        element.style.minWidth = ''; // Clear forced minWidth
                         setStartUpper(savedStartUpper);
                         setStartLower(savedStartLower);
                         setIsExporting(false); 
@@ -519,7 +547,7 @@
             const toggleMissing = (id) => {
                 setData(prev => {
                     const newMissing = !prev[id].missing;
-                    // 同步更新第一筆牙菌斑紀錄
+                    // Sync to first plaque record
                     setPlaqueRecords(prevRecords => {
                         if (prevRecords.length === 0) return prevRecords;
                         const newRecords = [...prevRecords];
@@ -854,7 +882,6 @@
                                         </div>
                                     );
                                 })}
-                                <div className="clinic-footer">{clinicName}</div>
                             </div>
                         ))}
                         <div className="flex justify-center mt-6 no-print">
@@ -930,9 +957,6 @@
                         <>
                             <div className="w-full max-w-[1400px] bg-white p-5 rounded-lg shadow-md mb-6 flex flex-col gap-4 border border-gray-200 mx-auto mt-6 no-print">
                                 {/* ... Controls ... */}
-                                {/* Keep existing controls code but remove cloud save button if not needed, 
-                                    or keep only local save. The user requested removing cloud part, 
-                                    so I implemented local file logic above. */}
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
