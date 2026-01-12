@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (ROC Input Integrated)</title>
+    <title>牙周治療紀錄表</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -144,7 +144,7 @@
             color: #000;
             padding: 0; 
             margin: 0;
-            display: block; 
+            display: block; /* Safari Fix: avoid flex on input */
         }
         .pd-input:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
         .val-danger { color: #dc2626; font-weight: 900; }
@@ -270,43 +270,63 @@
         const Teeth31to38 = [31, 32, 33, 34, 35, 36, 37, 38];
         const allTeeth = [...Teeth18to11, ...Teeth21to28, ...Teeth48to41, ...Teeth31to38];
 
-        // --- Custom ROC Date Picker Component ---
+        // --- Improved ROC Date Picker Component (Fixes typing issue) ---
         const ROCDatePicker = ({ value, onChange, theme = 'dark', isExporting = false }) => {
-            const [y, m, d] = useMemo(() => {
-                if (!value) return ['', '', ''];
-                const parts = value.split('-');
-                if (parts.length !== 3) return ['', '', ''];
-                const roc = parseInt(parts[0]) - 1911;
-                return [
-                    roc > 0 ? roc.toString() : '', 
-                    parts[1], 
-                    parts[2]
-                ];
+            // Local state to handle typing buffer
+            const [localY, setLocalY] = useState('');
+            const [localM, setLocalM] = useState('');
+            const [localD, setLocalD] = useState('');
+
+            // Sync from props when external value changes (e.g. file load)
+            useEffect(() => {
+                if (!value) {
+                    setLocalY(''); setLocalM(''); setLocalD('');
+                } else {
+                    const parts = value.split('-');
+                    if (parts.length === 3) {
+                        const roc = parseInt(parts[0]) - 1911;
+                        setLocalY(roc > 0 ? roc.toString() : '');
+                        setLocalM(parts[1]);
+                        setLocalD(parts[2]);
+                    }
+                }
             }, [value]);
 
-            // Handle display only for export
             if (isExporting) {
-                const displayDate = (y && m && d) ? `${y}/${m}/${d}` : '';
+                const displayDate = (localY && localM && localD) ? `${localY}/${localM}/${localD}` : '';
+                // Changed to always text-black based on feedback for plaque table visibility
                 const textClass = theme === 'light' ? 'text-white' : 'text-black';
                 return <span className={`${textClass} font-bold text-sm whitespace-nowrap`}>{displayDate}</span>;
             }
 
-            const handleChange = (part, val) => {
+            const handleLocalChange = (part, val) => {
                 const numericVal = val.replace(/[^0-9]/g, '');
-                let newY = part === 'y' ? numericVal : y;
-                let newM = part === 'm' ? numericVal : m;
-                let newD = part === 'd' ? numericVal : d;
+                
+                // Update local state first (UI responsiveness)
+                if (part === 'y') setLocalY(numericVal);
+                if (part === 'm') setLocalM(numericVal);
+                if (part === 'd') setLocalD(numericVal);
 
-                if (part === 'm' && parseInt(newM) > 12) newM = '12';
-                if (part === 'd' && parseInt(newD) > 31) newD = '31';
+                // Use the *new* value for calculation, current state for others
+                const nextY = part === 'y' ? numericVal : localY;
+                const nextM = part === 'm' ? numericVal : localM;
+                const nextD = part === 'd' ? numericVal : localD;
 
-                const adYear = newY ? (parseInt(newY) + 1911) : '';
-                const paddedM = newM.padStart(2, '0');
-                const paddedD = newD.padStart(2, '0');
+                // Try to sync to parent if all fields have data
+                if (nextY && nextM && nextD) {
+                    // Simple validation
+                    let mInt = parseInt(nextM);
+                    let dInt = parseInt(nextD);
+                    if (mInt > 12) mInt = 12; // Basic clamping
+                    if (dInt > 31) dInt = 31;
 
-                if (adYear && newM && newD) {
+                    const adYear = parseInt(nextY) + 1911;
+                    const paddedM = mInt.toString().padStart(2, '0');
+                    const paddedD = dInt.toString().padStart(2, '0');
+                    
                     onChange(`${adYear}-${paddedM}-${paddedD}`);
-                } else if (!newY && !newM && !newD) {
+                } else if (!nextY && !nextM && !nextD) {
+                    // Only clear if fully empty to avoid accidental data loss
                     onChange('');
                 }
             };
@@ -316,32 +336,11 @@
 
             return (
                 <div className="flex items-center justify-center whitespace-nowrap">
-                    <input 
-                        type="tel" 
-                        className={`${inputClass} w-8`} 
-                        placeholder="YYY" 
-                        value={y} 
-                        onChange={(e) => handleChange('y', e.target.value)} 
-                        maxLength="3"
-                    />
+                    <input type="tel" className={`${inputClass} w-8`} placeholder="YYY" value={localY} onChange={(e) => handleLocalChange('y', e.target.value)} maxLength="3" />
                     <span className={slashClass}>/</span>
-                    <input 
-                        type="tel" 
-                        className={`${inputClass} w-6`} 
-                        placeholder="MM" 
-                        value={m} 
-                        onChange={(e) => handleChange('m', e.target.value)} 
-                        maxLength="2"
-                    />
+                    <input type="tel" className={`${inputClass} w-6`} placeholder="MM" value={localM} onChange={(e) => handleLocalChange('m', e.target.value)} maxLength="2" />
                     <span className={slashClass}>/</span>
-                    <input 
-                        type="tel" 
-                        className={`${inputClass} w-6`} 
-                        placeholder="DD" 
-                        value={d} 
-                        onChange={(e) => handleChange('d', e.target.value)} 
-                        maxLength="2"
-                    />
+                    <input type="tel" className={`${inputClass} w-6`} placeholder="DD" value={localD} onChange={(e) => handleLocalChange('d', e.target.value)} maxLength="2" />
                 </div>
             );
         };
@@ -635,7 +634,6 @@
             
             const handleCycleClick = (id, cat, sub, field) => {
                 if (data[id].missing) return; 
-
                 setData(prev => {
                     const newData = { ...prev };
                     const tooth = { ...newData[id] };
@@ -669,6 +667,45 @@
                 setPlaqueRecords(prev => {
                     const newList = [...prev];
                     newList[recordIndex] = { ...newList[recordIndex], date: newDate };
+                    return newList;
+                });
+            };
+            
+            // Random Plaque Generator
+            const handleRandomPlaque = (recordIndex, level) => {
+                setPlaqueRecords(prev => {
+                    const newList = [...prev];
+                    const record = { ...newList[recordIndex] };
+                    const newData = { ...record.data };
+                    
+                    let threshold = 0.2;
+                    if (level === 'medium') threshold = 0.5;
+                    if (level === 'high') threshold = 0.8;
+                    if (level === 'verylow') threshold = 0.1; // 10%
+
+                    allTeeth.forEach(id => {
+                        if (newData[id].missing) return; // Skip missing
+
+                        const newBuccal = [
+                            Math.random() < threshold,
+                            Math.random() < threshold,
+                            Math.random() < threshold
+                        ];
+                        const newPalatal = [
+                            Math.random() < threshold,
+                            Math.random() < threshold,
+                            Math.random() < threshold
+                        ];
+
+                        newData[id] = {
+                            ...newData[id],
+                            buccal: newBuccal,
+                            palatal: newPalatal
+                        };
+                    });
+
+                    record.data = newData;
+                    newList[recordIndex] = record;
                     return newList;
                 });
             };
@@ -800,11 +837,9 @@
                             <td width="15%">病歷號: {patientInfo.id}</td>
                             <td width="20%">身分證字號: {patientInfo.idNumber}</td>
                             <td width="10%">性別: {patientInfo.gender}</td>
-                            <td width="10%">年齡: {patientInfo.age}</td>
+                            <td width="15%">生日: {formatDateToROC(patientInfo.dob)}</td>
+                            <td width="5%">年齡: {patientInfo.age}</td>
                             <td width="20%">主治醫師: {patientInfo.doctor}</td>
-                        </tr>
-                        <tr>
-                             <td colSpan="6">生日: {formatDateToROC(patientInfo.dob)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -890,16 +925,27 @@
                                             
                                             <div className="mb-2 px-2 border-b border-blue-200 pb-1">
                                                 {renderPatientInfoHeader()}
-                                                <div className="flex justify-end items-center text-xs font-bold text-black mt-1">
+                                                <div className="flex justify-between items-center text-xs font-bold text-black mt-1">
                                                     <span className="flex items-center gap-2 px-2 py-0.5">
-                                                        Date: 
+                                                        日期: 
                                                         <ROCDatePicker 
                                                             value={record.date} 
                                                             onChange={(newDate) => updatePlaqueDate(actualIdx, newDate)}
-                                                            theme="light" // Blue bg -> white text
+                                                            theme="dark" // Using dark theme for visibility on white background
                                                             isExporting={isExporting}
                                                         />
                                                     </span>
+
+                                                    {/* Random Plaque Controls (Hidden when exporting) */}
+                                                    {!isExporting && (
+                                                        <div className="flex items-center gap-2 no-print">
+                                                            <span className="text-gray-600">隨機生成:</span>
+                                                            <button onClick={() => handleRandomPlaque(actualIdx, 'verylow')} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded">微 (10%)</button>
+                                                            <button onClick={() => handleRandomPlaque(actualIdx, 'low')} className="bg-green-100 hover:bg-green-200 text-green-800 text-xs px-2 py-1 rounded">低 (20%)</button>
+                                                            <button onClick={() => handleRandomPlaque(actualIdx, 'medium')} className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">中 (50%)</button>
+                                                            <button onClick={() => handleRandomPlaque(actualIdx, 'high')} className="bg-red-100 hover:bg-red-200 text-red-800 text-xs px-2 py-1 rounded">高 (80%)</button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1018,7 +1064,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">ROC Input Integrated</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">Input Fix & Random 10%</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
