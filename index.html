@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (DOB Added)</title>
+    <title>牙周治療紀錄表 (All ROC Dates)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -14,30 +14,6 @@
     <!-- Export Tools -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyA9ZQx9eGD51K-VfUCuMddYWrsg2W9k16o",
-            authDomain: "tooth-treat--charteasy.firebaseapp.com",
-            projectId: "tooth-treat--charteasy",
-            storageBucket: "tooth-treat--charteasy.firebasestorage.app",
-            messagingSenderId: "675075241868",
-            appId: "1:675075241868:web:22d36417ed0d0f35ed08a9",
-            measurementId: "G-GKM48Y8JKR"
-        };
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            window.db = getFirestore(app);
-            window.firestoreModules = { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit };
-        } catch(e) {
-            console.warn("Firebase Init Error", e);
-        }
-    </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -62,14 +38,14 @@
             overflow: hidden; 
         }
 
-        /* --- 缺牙樣式 (修正版) --- */
+        /* --- 缺牙樣式 --- */
         .missing-overlay {
             position: relative;
             background-image: repeating-linear-gradient(
                 45deg,
                 transparent,
                 transparent 5px,
-                rgba(150, 150, 150, 0.5) 5px, /* 灰色半透明線條 */
+                rgba(150, 150, 150, 0.5) 5px,
                 rgba(150, 150, 150, 0.5) 10px
             );
             color: #fff;
@@ -209,7 +185,6 @@
         }
         .patient-info-table td {
             padding: 2px 4px;
-            white-space: nowrap;
         }
         
         /* Furcation */
@@ -343,10 +318,7 @@
 
             const [data, setData] = useState(initialData);
             const [plaqueRecords, setPlaqueRecords] = useState([createNewPlaqueRecord(initialData)]);
-            const [patientInfo, setPatientInfo] = useState({ 
-                name: '', id: '', idNumber: '', gender: '', dob: '', age: '', doctor: '', 
-                datePre: new Date().toISOString().split('T')[0], datePost: '' 
-            });
+            const [patientInfo, setPatientInfo] = useState({ name: '', id: '', idNumber: '', gender: '', dob: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
             const [activeTab, setActiveTab] = useState('chart');
             const [toastMsg, setToastMsg] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -356,6 +328,16 @@
             const [isExporting, setIsExporting] = useState(false);
 
             const chartRef = useRef(null);
+
+            // 轉換日期為民國年格式
+            const formatDateToROC = (dateStr) => {
+                if (!dateStr) return '';
+                const parts = dateStr.split('-');
+                if (parts.length !== 3) return dateStr;
+                const year = parseInt(parts[0]) - 1911;
+                const rocYear = year < 0 ? year : String(year).padStart(3, '0');
+                return `${rocYear}/${parts[1]}/${parts[2]}`;
+            };
 
             const perioStats = useMemo(() => {
                 let totalTeeth = 0, deepTeethInit = 0, improvedTeeth = 0;
@@ -719,7 +701,6 @@
             const renderPlaqueRow = (recordIndex, id, surface) => {
                 const toothData = plaqueRecords[recordIndex].data[id];
                 const vals = toothData ? toothData[surface] : [false, false, false];
-                // 使用 Local missing 狀態
                 if (toothData.missing) return <div className="missing-overlay w-full h-full"></div>;
                 return (
                     <div className="indicator-row">
@@ -744,7 +725,7 @@
                             <td width="10%">病歷號: {patientInfo.id}</td>
                             <td width="15%">身分證字號: {patientInfo.idNumber}</td>
                             <td width="5%">性別: {patientInfo.gender}</td>
-                            <td width="15%">生日: {patientInfo.dob}</td>
+                            <td width="15%">生日: {formatDateToROC(patientInfo.dob)}</td>
                             <td width="5%">年齡: {patientInfo.age}</td>
                             <td width="10%">主治醫師: {patientInfo.doctor}</td>
                         </tr>
@@ -758,8 +739,8 @@
                     <div className="border-b-2 border-black mb-3 pb-2">
                         {renderPatientInfoHeader()}
                         <div className="px-2 font-bold text-sm flex gap-4">
-                             <span>術前日期: {patientInfo.datePre}</span>
-                             <span>術後日期: {patientInfo.datePost}</span>
+                             <span>術前日期: {formatDateToROC(patientInfo.datePre)}</span>
+                             <span>術後日期: {formatDateToROC(patientInfo.datePost)}</span>
                         </div>
                     </div>
 
@@ -836,7 +817,7 @@
                                                     <span className="flex items-center gap-2 px-2 py-0.5">
                                                         Date: 
                                                         {isExporting ? 
-                                                            <span className="date-text-static">{record.date}</span> :
+                                                            <span className="date-text-static">{formatDateToROC(record.date)}</span> :
                                                             <input type="date" className="date-input-custom" value={record.date} onChange={(e) => updatePlaqueDate(actualIdx, e.target.value)} />
                                                         }
                                                     </span>
@@ -958,7 +939,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">DOB Added</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">All ROC Dates</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
