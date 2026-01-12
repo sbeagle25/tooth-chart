@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (JPG Export Fix)</title>
+    <title>牙周治療紀錄表 (DOB Added)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -14,6 +14,30 @@
     <!-- Export Tools -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyA9ZQx9eGD51K-VfUCuMddYWrsg2W9k16o",
+            authDomain: "tooth-treat--charteasy.firebaseapp.com",
+            projectId: "tooth-treat--charteasy",
+            storageBucket: "tooth-treat--charteasy.firebasestorage.app",
+            messagingSenderId: "675075241868",
+            appId: "1:675075241868:web:22d36417ed0d0f35ed08a9",
+            measurementId: "G-GKM48Y8JKR"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.firestoreModules = { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit };
+        } catch(e) {
+            console.warn("Firebase Init Error", e);
+        }
+    </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -38,14 +62,14 @@
             overflow: hidden; 
         }
 
-        /* --- 缺牙樣式 --- */
+        /* --- 缺牙樣式 (修正版) --- */
         .missing-overlay {
             position: relative;
             background-image: repeating-linear-gradient(
                 45deg,
                 transparent,
                 transparent 5px,
-                rgba(150, 150, 150, 0.5) 5px,
+                rgba(150, 150, 150, 0.5) 5px, /* 灰色半透明線條 */
                 rgba(150, 150, 150, 0.5) 10px
             );
             color: #fff;
@@ -82,7 +106,6 @@
             position: relative;
             display: flex;
             flex-direction: column;
-            justify-content: space-between; /* 確保 footer 被推到下面 */
         }
 
         /* --- 表格樣式 --- */
@@ -151,7 +174,7 @@
             padding: 0 1px;
         }
 
-        /* 日期欄位 */
+        /* 日期欄位修正 */
         .date-input-custom {
             background: transparent;
             border: none; 
@@ -174,6 +197,7 @@
             line-height: 1;
             padding: 0 4px;
             white-space: nowrap;
+            display: inline-block;
         }
 
         .patient-info-table {
@@ -185,6 +209,7 @@
         }
         .patient-info-table td {
             padding: 2px 4px;
+            white-space: nowrap;
         }
         
         /* Furcation */
@@ -234,7 +259,7 @@
         .summary-label { font-size: 11px; color: #4b5563; font-weight: 700; margin-bottom: 2px; }
         .summary-value { font-size: 16px; font-weight: 900; color: #000; }
         .summary-value.highlight { color: #dc2626; }
-        .clinic-footer { margin-top: auto; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; width: 100%; }
+        .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; width: 100%; }
         .header-control { display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: normal; background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px; }
         .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
 
@@ -318,7 +343,10 @@
 
             const [data, setData] = useState(initialData);
             const [plaqueRecords, setPlaqueRecords] = useState([createNewPlaqueRecord(initialData)]);
-            const [patientInfo, setPatientInfo] = useState({ name: '', id: '', idNumber: '', gender: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
+            const [patientInfo, setPatientInfo] = useState({ 
+                name: '', id: '', idNumber: '', gender: '', dob: '', age: '', doctor: '', 
+                datePre: new Date().toISOString().split('T')[0], datePost: '' 
+            });
             const [activeTab, setActiveTab] = useState('chart');
             const [toastMsg, setToastMsg] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -423,32 +451,20 @@
                         clinicName: clinicName,
                         lastModified: new Date().toISOString()
                     };
-                    
-                    if ('showSaveFilePicker' in window) {
-                        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
-                        let handle = fileHandle;
-                        if (saveAs || !handle) {
-                            const suggestedName = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
-                            handle = await window.showSaveFilePicker({
-                                suggestedName: suggestedName,
-                                types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
-                            });
-                            setFileHandle(handle);
-                        }
-                        const writable = await handle.createWritable();
-                        await writable.write(blob);
-                        await writable.close();
-                        showToast("💾 儲存成功！");
-                    } else {
-                        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
-                        const downloadAnchorNode = document.createElement('a');
-                        downloadAnchorNode.setAttribute("href", dataStr);
-                        downloadAnchorNode.setAttribute("download", `${patientInfo.id}_${patientInfo.name || 'record'}.json`);
-                        document.body.appendChild(downloadAnchorNode);
-                        downloadAnchorNode.click();
-                        downloadAnchorNode.remove();
-                        showToast("💾 檔案已下載");
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
+                    let handle = fileHandle;
+                    if (saveAs || !handle) {
+                        const suggestedName = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
+                        handle = await window.showSaveFilePicker({
+                            suggestedName: suggestedName,
+                            types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
+                        });
+                        setFileHandle(handle);
                     }
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    showToast("💾 儲存成功！");
                 } catch (err) {
                     if (err.name !== 'AbortError') { console.error(err); alert("儲存失敗"); }
                 }
@@ -459,7 +475,7 @@
                     setFileHandle(null);
                     setData(initialData);
                     setPlaqueRecords([createNewPlaqueRecord(initialData)]);
-                    setPatientInfo({ name: '', id: '', idNumber: '', gender: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
+                    setPatientInfo({ name: '', id: '', idNumber: '', gender: '', dob: '', age: '', doctor: '', datePre: new Date().toISOString().split('T')[0], datePost: '' });
                     setIsStarted(false);
                 }
             };
@@ -470,7 +486,7 @@
                 const element = document.querySelector(selector);
                 if(!element) { alert('請先切換到要列印的頁面'); return; }
 
-                setIsExporting(true);
+                setIsExporting(true); // Switch to text mode for export
                 const savedStartUpper = startUpper;
                 const savedStartLower = startLower;
                 setStartUpper('18');
@@ -493,27 +509,7 @@
                             tempCanvas.width = targetWidth; tempCanvas.height = targetHeight;
                             const ctx = tempCanvas.getContext('2d');
                             ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, targetWidth, targetHeight);
-                            
-                            // 修正：使用 fit logic 確保內容完整放入
-                            const ratio = canvas.width / canvas.height;
-                            const targetRatio = targetWidth / targetHeight;
-                            let drawW, drawH, dx, dy;
-                            
-                            if (ratio > targetRatio) {
-                                // 寬度為主
-                                drawW = targetWidth;
-                                drawH = drawW / ratio;
-                                dx = 0;
-                                dy = (targetHeight - drawH) / 2;
-                            } else {
-                                // 高度為主
-                                drawH = targetHeight;
-                                drawW = drawH * ratio;
-                                dx = (targetWidth - drawW) / 2;
-                                dy = 0;
-                            }
-                            
-                            ctx.drawImage(canvas, dx, dy, drawW, drawH);
+                            ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
                             outputCanvas = tempCanvas;
                         }
 
@@ -744,12 +740,13 @@
                 <table className="patient-info-table">
                     <tbody>
                         <tr>
-                            <td width="15%">姓名: {patientInfo.name}</td>
-                            <td width="15%">病歷號: {patientInfo.id}</td>
-                            <td width="20%">身分證字號: {patientInfo.idNumber}</td>
-                            <td width="10%">性別: {patientInfo.gender}</td>
-                            <td width="10%">年齡: {patientInfo.age}</td>
-                            <td width="20%">主治醫師: {patientInfo.doctor}</td>
+                            <td width="10%">姓名: {patientInfo.name}</td>
+                            <td width="10%">病歷號: {patientInfo.id}</td>
+                            <td width="15%">身分證字號: {patientInfo.idNumber}</td>
+                            <td width="5%">性別: {patientInfo.gender}</td>
+                            <td width="15%">生日: {patientInfo.dob}</td>
+                            <td width="5%">年齡: {patientInfo.age}</td>
+                            <td width="10%">主治醫師: {patientInfo.doctor}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -961,7 +958,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">JPG Fix</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">DOB Added</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
@@ -986,6 +983,10 @@
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">姓名</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.name} onChange={e=>setPatientInfo({...patientInfo, name: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">身份證字號</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.idNumber} onChange={e=>setPatientInfo({...patientInfo, idNumber: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">性別</label><select className="border border-gray-300 rounded px-3 py-2 bg-white" value={patientInfo.gender} onChange={e=>setPatientInfo({...patientInfo, gender: e.target.value})}><option value="">請選擇</option><option value="男">男</option><option value="女">女</option></select></div>
+                                    
+                                    {/* 新增生日欄位 */}
+                                    <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">生日</label><input type="date" className="border border-gray-300 rounded px-3 py-2" value={patientInfo.dob} onChange={e=>setPatientInfo({...patientInfo, dob: e.target.value})} /></div>
+
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">年齡</label><input type="number" className="border border-gray-300 rounded px-3 py-2" value={patientInfo.age} onChange={e=>setPatientInfo({...patientInfo, age: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">主治醫師</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.doctor} onChange={e=>setPatientInfo({...patientInfo, doctor: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">術前日期</label><input type="date" className="border border-gray-300 rounded px-3 py-2 text-gray-700" value={patientInfo.datePre} onChange={e=>setPatientInfo({...patientInfo, datePre: e.target.value})} /></div>
