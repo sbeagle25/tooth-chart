@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (All ROC Dates)</title>
+    <title>牙周治療紀錄表 (ROC Input Integrated)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -14,6 +14,30 @@
     <!-- Export Tools -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyA9ZQx9eGD51K-VfUCuMddYWrsg2W9k16o",
+            authDomain: "tooth-treat--charteasy.firebaseapp.com",
+            projectId: "tooth-treat--charteasy",
+            storageBucket: "tooth-treat--charteasy.firebasestorage.app",
+            messagingSenderId: "675075241868",
+            appId: "1:675075241868:web:22d36417ed0d0f35ed08a9",
+            measurementId: "G-GKM48Y8JKR"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.firestoreModules = { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit };
+        } catch(e) {
+            console.warn("Firebase Init Error", e);
+        }
+    </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -150,32 +174,6 @@
             padding: 0 1px;
         }
 
-        /* 日期欄位修正 */
-        .date-input-custom {
-            background: transparent;
-            border: none; 
-            border-bottom: 1px solid #000; 
-            color: #000; 
-            padding: 0 4px; 
-            border-radius: 0;
-            font-size: 12px; 
-            font-weight: bold;
-            text-align: left;
-            width: 130px; 
-            height: 20px; 
-            line-height: 1.2;
-        }
-        
-        .date-text-static {
-            font-size: 12px;
-            font-weight: 700;
-            color: #000;
-            line-height: 1;
-            padding: 0 4px;
-            white-space: nowrap;
-            display: inline-block;
-        }
-
         .patient-info-table {
             width: 100%;
             border-collapse: collapse;
@@ -272,6 +270,82 @@
         const Teeth31to38 = [31, 32, 33, 34, 35, 36, 37, 38];
         const allTeeth = [...Teeth18to11, ...Teeth21to28, ...Teeth48to41, ...Teeth31to38];
 
+        // --- Custom ROC Date Picker Component ---
+        const ROCDatePicker = ({ value, onChange, theme = 'dark', isExporting = false }) => {
+            const [y, m, d] = useMemo(() => {
+                if (!value) return ['', '', ''];
+                const parts = value.split('-');
+                if (parts.length !== 3) return ['', '', ''];
+                const roc = parseInt(parts[0]) - 1911;
+                return [
+                    roc > 0 ? roc.toString() : '', 
+                    parts[1], 
+                    parts[2]
+                ];
+            }, [value]);
+
+            // Handle display only for export
+            if (isExporting) {
+                const displayDate = (y && m && d) ? `${y}/${m}/${d}` : '';
+                const textClass = theme === 'light' ? 'text-white' : 'text-black';
+                return <span className={`${textClass} font-bold text-sm whitespace-nowrap`}>{displayDate}</span>;
+            }
+
+            const handleChange = (part, val) => {
+                const numericVal = val.replace(/[^0-9]/g, '');
+                let newY = part === 'y' ? numericVal : y;
+                let newM = part === 'm' ? numericVal : m;
+                let newD = part === 'd' ? numericVal : d;
+
+                if (part === 'm' && parseInt(newM) > 12) newM = '12';
+                if (part === 'd' && parseInt(newD) > 31) newD = '31';
+
+                const adYear = newY ? (parseInt(newY) + 1911) : '';
+                const paddedM = newM.padStart(2, '0');
+                const paddedD = newD.padStart(2, '0');
+
+                if (adYear && newM && newD) {
+                    onChange(`${adYear}-${paddedM}-${paddedD}`);
+                } else if (!newY && !newM && !newD) {
+                    onChange('');
+                }
+            };
+
+            const inputClass = `bg-transparent border-b text-center focus:outline-none p-0 m-0 ${theme === 'light' ? 'border-white text-white placeholder-gray-300' : 'border-gray-400 text-gray-900 placeholder-gray-400'}`;
+            const slashClass = `mx-0.5 font-bold ${theme === 'light' ? 'text-white' : 'text-gray-900'}`;
+
+            return (
+                <div className="flex items-center justify-center whitespace-nowrap">
+                    <input 
+                        type="tel" 
+                        className={`${inputClass} w-8`} 
+                        placeholder="YYY" 
+                        value={y} 
+                        onChange={(e) => handleChange('y', e.target.value)} 
+                        maxLength="3"
+                    />
+                    <span className={slashClass}>/</span>
+                    <input 
+                        type="tel" 
+                        className={`${inputClass} w-6`} 
+                        placeholder="MM" 
+                        value={m} 
+                        onChange={(e) => handleChange('m', e.target.value)} 
+                        maxLength="2"
+                    />
+                    <span className={slashClass}>/</span>
+                    <input 
+                        type="tel" 
+                        className={`${inputClass} w-6`} 
+                        placeholder="DD" 
+                        value={d} 
+                        onChange={(e) => handleChange('d', e.target.value)} 
+                        maxLength="2"
+                    />
+                </div>
+            );
+        };
+
         const createToothData = () => ({
             missing: false,
             mobility: { initial: 0, reeval: 0 },
@@ -329,7 +403,7 @@
 
             const chartRef = useRef(null);
 
-            // 轉換日期為民國年格式
+            // 轉換日期為民國年格式 (僅用於純文字顯示)
             const formatDateToROC = (dateStr) => {
                 if (!dateStr) return '';
                 const parts = dateStr.split('-');
@@ -561,6 +635,7 @@
             
             const handleCycleClick = (id, cat, sub, field) => {
                 if (data[id].missing) return; 
+
                 setData(prev => {
                     const newData = { ...prev };
                     const tooth = { ...newData[id] };
@@ -721,13 +796,15 @@
                 <table className="patient-info-table">
                     <tbody>
                         <tr>
-                            <td width="10%">姓名: {patientInfo.name}</td>
-                            <td width="10%">病歷號: {patientInfo.id}</td>
-                            <td width="15%">身分證字號: {patientInfo.idNumber}</td>
-                            <td width="5%">性別: {patientInfo.gender}</td>
-                            <td width="15%">生日: {formatDateToROC(patientInfo.dob)}</td>
-                            <td width="5%">年齡: {patientInfo.age}</td>
-                            <td width="10%">主治醫師: {patientInfo.doctor}</td>
+                            <td width="15%">姓名: {patientInfo.name}</td>
+                            <td width="15%">病歷號: {patientInfo.id}</td>
+                            <td width="20%">身分證字號: {patientInfo.idNumber}</td>
+                            <td width="10%">性別: {patientInfo.gender}</td>
+                            <td width="10%">年齡: {patientInfo.age}</td>
+                            <td width="20%">主治醫師: {patientInfo.doctor}</td>
+                        </tr>
+                        <tr>
+                             <td colSpan="6">生日: {formatDateToROC(patientInfo.dob)}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -816,10 +893,12 @@
                                                 <div className="flex justify-end items-center text-xs font-bold text-black mt-1">
                                                     <span className="flex items-center gap-2 px-2 py-0.5">
                                                         Date: 
-                                                        {isExporting ? 
-                                                            <span className="date-text-static">{formatDateToROC(record.date)}</span> :
-                                                            <input type="date" className="date-input-custom" value={record.date} onChange={(e) => updatePlaqueDate(actualIdx, e.target.value)} />
-                                                        }
+                                                        <ROCDatePicker 
+                                                            value={record.date} 
+                                                            onChange={(newDate) => updatePlaqueDate(actualIdx, newDate)}
+                                                            theme="light" // Blue bg -> white text
+                                                            isExporting={isExporting}
+                                                        />
                                                     </span>
                                                 </div>
                                             </div>
@@ -939,7 +1018,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">All ROC Dates</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">ROC Input Integrated</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
@@ -965,13 +1044,36 @@
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">身份證字號</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.idNumber} onChange={e=>setPatientInfo({...patientInfo, idNumber: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">性別</label><select className="border border-gray-300 rounded px-3 py-2 bg-white" value={patientInfo.gender} onChange={e=>setPatientInfo({...patientInfo, gender: e.target.value})}><option value="">請選擇</option><option value="男">男</option><option value="女">女</option></select></div>
                                     
-                                    {/* 新增生日欄位 */}
-                                    <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">生日</label><input type="date" className="border border-gray-300 rounded px-3 py-2" value={patientInfo.dob} onChange={e=>setPatientInfo({...patientInfo, dob: e.target.value})} /></div>
+                                    {/* ROC DOB */}
+                                    <div className="flex flex-col">
+                                        <label className="text-xs font-bold text-gray-500 mb-1">生日</label>
+                                        <ROCDatePicker 
+                                            value={patientInfo.dob} 
+                                            onChange={(newDate) => setPatientInfo({...patientInfo, dob: newDate})} 
+                                            theme="dark" // White bg -> dark text
+                                        />
+                                    </div>
 
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">年齡</label><input type="number" className="border border-gray-300 rounded px-3 py-2" value={patientInfo.age} onChange={e=>setPatientInfo({...patientInfo, age: e.target.value})} /></div>
                                     <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">主治醫師</label><input className="border border-gray-300 rounded px-3 py-2" value={patientInfo.doctor} onChange={e=>setPatientInfo({...patientInfo, doctor: e.target.value})} /></div>
-                                    <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">術前日期</label><input type="date" className="border border-gray-300 rounded px-3 py-2 text-gray-700" value={patientInfo.datePre} onChange={e=>setPatientInfo({...patientInfo, datePre: e.target.value})} /></div>
-                                    <div className="flex flex-col"><label className="text-xs font-bold text-gray-500 mb-1">術後日期</label><input type="date" className="border border-gray-300 rounded px-3 py-2 text-gray-700" value={patientInfo.datePost} onChange={e=>setPatientInfo({...patientInfo, datePost: e.target.value})} /></div>
+                                    
+                                    {/* ROC Dates */}
+                                    <div className="flex flex-col">
+                                        <label className="text-xs font-bold text-gray-500 mb-1">術前日期</label>
+                                        <ROCDatePicker 
+                                            value={patientInfo.datePre} 
+                                            onChange={(newDate) => setPatientInfo({...patientInfo, datePre: newDate})} 
+                                            theme="dark"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <label className="text-xs font-bold text-gray-500 mb-1">術後日期</label>
+                                        <ROCDatePicker 
+                                            value={patientInfo.datePost} 
+                                            onChange={(newDate) => setPatientInfo({...patientInfo, datePost: newDate})} 
+                                            theme="dark"
+                                        />
+                                    </div>
                                 </div>
                                 
                                 {/* Download Buttons Section */}
