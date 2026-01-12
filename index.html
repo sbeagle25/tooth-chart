@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>牙周治療紀錄表 (iOS Safari Fix)</title>
+    <title>牙周治療紀錄表 (JPG Export Fix)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -38,7 +38,7 @@
             overflow: hidden; 
         }
 
-        /* --- 缺牙樣式 (修正版) --- */
+        /* --- 缺牙樣式 --- */
         .missing-overlay {
             position: relative;
             background-image: repeating-linear-gradient(
@@ -82,6 +82,7 @@
             position: relative;
             display: flex;
             flex-direction: column;
+            justify-content: space-between; /* 確保 footer 被推到下面 */
         }
 
         /* --- 表格樣式 --- */
@@ -150,7 +151,7 @@
             padding: 0 1px;
         }
 
-        /* 日期欄位修正 */
+        /* 日期欄位 */
         .date-input-custom {
             background: transparent;
             border: none; 
@@ -160,12 +161,10 @@
             border-radius: 0;
             font-size: 12px; 
             font-weight: bold;
-            text-align: center;
-            width: 140px; 
-            height: 24px; 
-            line-height: 24px;
-            display: block;
-            margin: 0 auto;
+            text-align: left;
+            width: 130px; 
+            height: 20px; 
+            line-height: 1.2;
         }
         
         .date-text-static {
@@ -173,9 +172,8 @@
             font-weight: 700;
             color: #000;
             line-height: 1;
-            padding: 4px 8px;
+            padding: 0 4px;
             white-space: nowrap;
-            display: inline-block;
         }
 
         .patient-info-table {
@@ -236,7 +234,7 @@
         .summary-label { font-size: 11px; color: #4b5563; font-weight: 700; margin-bottom: 2px; }
         .summary-value { font-size: 16px; font-weight: 900; color: #000; }
         .summary-value.highlight { color: #dc2626; }
-        .clinic-footer { margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; }
+        .clinic-footer { margin-top: auto; padding-top: 10px; border-top: 2px solid #000; text-align: center; font-size: 18px; font-weight: 900; color: #000; letter-spacing: 3px; width: 100%; }
         .header-control { display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: normal; background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px; }
         .header-radio { cursor: pointer; display: flex; align-items: center; gap: 2px; }
 
@@ -426,7 +424,6 @@
                         lastModified: new Date().toISOString()
                     };
                     
-                    // 1. 如果瀏覽器支援 File System Access API
                     if ('showSaveFilePicker' in window) {
                         const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
                         let handle = fileHandle;
@@ -443,7 +440,6 @@
                         await writable.close();
                         showToast("💾 儲存成功！");
                     } else {
-                        // 2. iOS / Android Fallback: 傳統下載
                         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
                         const downloadAnchorNode = document.createElement('a');
                         downloadAnchorNode.setAttribute("href", dataStr);
@@ -481,26 +477,13 @@
                 setStartLower('48');
 
                 setTimeout(async () => {
-                    // Mobile Fix: Force styles before capture
                     const originalStyle = { width: element.style.width, maxWidth: element.style.maxWidth, overflow: element.style.overflow };
-                    
-                    // Force desktop size/layout
-                    element.style.width = '297mm'; 
-                    element.style.maxWidth = 'none'; 
-                    element.style.minWidth = '1123px'; // Force minimum width for mobile
-                    element.style.overflow = 'visible';
+                    element.style.width = '297mm'; element.style.maxWidth = 'none'; element.style.overflow = 'visible';
                     window.scrollTo(0, 0); 
 
                     try {
                         const captureScale = format.startsWith('jpg') ? 4 : 3;
-                        const canvas = await html2canvas(element, { 
-                            scale: captureScale, 
-                            useCORS: true, 
-                            backgroundColor: "#ffffff", 
-                            windowWidth: 1280, // Simulate Desktop Width
-                            width: 1280,      // Explicit width for mobile
-                            height: element.scrollHeight
-                        });
+                        const canvas = await html2canvas(element, { scale: captureScale, useCORS: true, backgroundColor: "#ffffff", windowWidth: 1200 });
                         
                         let outputCanvas = canvas;
                         if (format.startsWith('jpg')) {
@@ -510,7 +493,27 @@
                             tempCanvas.width = targetWidth; tempCanvas.height = targetHeight;
                             const ctx = tempCanvas.getContext('2d');
                             ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, targetWidth, targetHeight);
-                            ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+                            
+                            // 修正：使用 fit logic 確保內容完整放入
+                            const ratio = canvas.width / canvas.height;
+                            const targetRatio = targetWidth / targetHeight;
+                            let drawW, drawH, dx, dy;
+                            
+                            if (ratio > targetRatio) {
+                                // 寬度為主
+                                drawW = targetWidth;
+                                drawH = drawW / ratio;
+                                dx = 0;
+                                dy = (targetHeight - drawH) / 2;
+                            } else {
+                                // 高度為主
+                                drawH = targetHeight;
+                                drawW = drawH * ratio;
+                                dx = (targetWidth - drawW) / 2;
+                                dy = 0;
+                            }
+                            
+                            ctx.drawImage(canvas, dx, dy, drawW, drawH);
                             outputCanvas = tempCanvas;
                         }
 
@@ -532,11 +535,9 @@
                     } catch (err) {
                         console.error("Export failed", err);
                     } finally {
-                        // Restore
                         element.style.width = originalStyle.width;
                         element.style.maxWidth = originalStyle.maxWidth;
                         element.style.overflow = originalStyle.overflow;
-                        element.style.minWidth = ''; // Clear forced minWidth
                         setStartUpper(savedStartUpper);
                         setStartLower(savedStartLower);
                         setIsExporting(false); 
@@ -960,7 +961,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">Local System</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">JPG Fix</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
