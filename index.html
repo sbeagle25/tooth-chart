@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>牙周治療紀錄表 (Local File Fix)</title>
+    <title>牙周治療紀錄表 (iOS File Fix)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -148,32 +148,6 @@
             white-space: normal;
             line-height: 1.1;
             padding: 0 1px;
-        }
-
-        /* 日期欄位修正 */
-        .date-input-custom {
-            background: transparent;
-            border: none; 
-            border-bottom: 1px solid #000; 
-            color: #000; 
-            padding: 0 4px; 
-            border-radius: 0;
-            font-size: 12px; 
-            font-weight: bold;
-            text-align: left;
-            width: 130px; 
-            height: 20px; 
-            line-height: 1.2;
-        }
-        
-        .date-text-static {
-            font-size: 12px;
-            font-weight: 700;
-            color: #000;
-            line-height: 1;
-            padding: 0 4px;
-            white-space: nowrap;
-            display: inline-block;
         }
 
         .patient-info-table {
@@ -507,7 +481,6 @@
                         if (err.name !== 'AbortError') alert("無法開啟檔案");
                     }
                 } else {
-                    // Fallback for iOS
                     if (fileInputRef.current) {
                         fileInputRef.current.click();
                     }
@@ -1081,6 +1054,14 @@
                                     <button onClick={handleOpenFile} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg w-full flex items-center justify-center gap-2 shadow">
                                         📂 開啟舊檔
                                     </button>
+                                    {/* 隱藏的檔案輸入框，用於 iOS */}
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleFileChange} 
+                                        accept=".json" 
+                                        style={{ display: 'none' }} 
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -1095,7 +1076,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">Input Fix & Random 10%</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">iOS File Fix</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
