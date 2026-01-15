@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>牙周治療紀錄表 (iOS Save Fix)</title>
+    <title>牙周治療紀錄表 (Local File Fix)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -14,30 +14,6 @@
     <!-- Export Tools -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-    <!-- Firebase SDK (Optional but kept for structure) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyA9ZQx9eGD51K-VfUCuMddYWrsg2W9k16o",
-            authDomain: "tooth-treat--charteasy.firebaseapp.com",
-            projectId: "tooth-treat--charteasy",
-            storageBucket: "tooth-treat--charteasy.firebasestorage.app",
-            messagingSenderId: "675075241868",
-            appId: "1:675075241868:web:22d36417ed0d0f35ed08a9",
-            measurementId: "G-GKM48Y8JKR"
-        };
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            window.db = getFirestore(app);
-            window.firestoreModules = { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit };
-        } catch(e) {
-            console.warn("Firebase Init Error", e);
-        }
-    </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -406,6 +382,7 @@
             const [customClinicName, setCustomClinicName] = useState('');
             const [isStarted, setIsStarted] = useState(false);
             const [fileHandle, setFileHandle] = useState(null);
+            const fileInputRef = useRef(null); // Ref for hidden file input
 
             const [data, setData] = useState(initialData);
             const [plaqueRecords, setPlaqueRecords] = useState([createNewPlaqueRecord(initialData)]);
@@ -485,31 +462,54 @@
                 setIsStarted(true);
             };
 
-            const handleOpenFile = async () => {
-                try {
-                    const [handle] = await window.showOpenFilePicker({
-                        types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
-                        multiple: false
-                    });
-                    const file = await handle.getFile();
-                    const text = await file.text();
-                    const json = JSON.parse(text);
+            const loadDataFromJSON = (json, fileName) => {
+                if(json.info) setPatientInfo(json.info);
+                if(json.data) setData(json.data);
+                if(json.plaqueRecords) setPlaqueRecords(json.plaqueRecords);
+                if(json.clinicName) {
+                        setClinicName(json.clinicName);
+                        setCustomClinicName(json.clinicName);
+                }
+                setIsStarted(true);
+                showToast(`📂 已開啟: ${fileName}`);
+            };
 
-                    if(json.info) setPatientInfo(json.info);
-                    if(json.data) setData(json.data);
-                    if(json.plaqueRecords) setPlaqueRecords(json.plaqueRecords);
-                    if(json.clinicName) {
-                         setClinicName(json.clinicName);
-                         setCustomClinicName(json.clinicName);
+            const handleFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const json = JSON.parse(e.target.result);
+                        setFileHandle(null); 
+                        loadDataFromJSON(json, file.name);
+                    } catch (err) {
+                        alert("讀取失敗：格式錯誤");
                     }
-                    
-                    setFileHandle(handle);
-                    setIsStarted(true);
-                    showToast(`📂 已開啟: ${file.name}`);
-                } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        console.error(err);
-                        alert("無法開啟檔案，請確認瀏覽器支援或使用匯入功能。");
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const handleOpenFile = async () => {
+                if ('showOpenFilePicker' in window) {
+                    try {
+                        const [handle] = await window.showOpenFilePicker({
+                            types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
+                            multiple: false
+                        });
+                        const file = await handle.getFile();
+                        const text = await file.text();
+                        const json = JSON.parse(text);
+                        setFileHandle(handle);
+                        loadDataFromJSON(json, file.name);
+                    } catch (err) {
+                        if (err.name !== 'AbortError') alert("無法開啟檔案");
+                    }
+                } else {
+                    // Fallback for iOS
+                    if (fileInputRef.current) {
+                        fileInputRef.current.click();
                     }
                 }
             };
@@ -540,7 +540,6 @@
                         await writable.close();
                         showToast("💾 儲存成功！");
                     } else {
-                        // iOS/Mobile Fallback
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
@@ -551,7 +550,7 @@
                             document.body.removeChild(a);
                             window.URL.revokeObjectURL(url);
                         }, 100);
-                        showToast("💾 檔案已下載 (請檢查檔案 App)");
+                        showToast("💾 檔案已下載");
                     }
                 } catch (err) {
                     if (err.name !== 'AbortError') { console.error(err); alert("儲存失敗"); }
@@ -632,6 +631,7 @@
             const toggleMissing = (id) => {
                 setData(prev => {
                     const newMissing = !prev[id].missing;
+                    // Sync to first plaque record
                     setPlaqueRecords(prevRecords => {
                         if (prevRecords.length === 0) return prevRecords;
                         const newRecords = [...prevRecords];
