@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>牙周治療紀錄表 (iOS File Fix)</title>
+    <title>牙周治療紀錄表 (iOS Share Save)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -150,6 +150,32 @@
             padding: 0 1px;
         }
 
+        /* 日期欄位修正 */
+        .date-input-custom {
+            background: transparent;
+            border: none; 
+            border-bottom: 1px solid #000; 
+            color: #000; 
+            padding: 0 4px; 
+            border-radius: 0;
+            font-size: 12px; 
+            font-weight: bold;
+            text-align: left;
+            width: 130px; 
+            height: 20px; 
+            line-height: 1.2;
+        }
+        
+        .date-text-static {
+            font-size: 12px;
+            font-weight: 700;
+            color: #000;
+            line-height: 1;
+            padding: 0 4px;
+            white-space: nowrap;
+            display: inline-block;
+        }
+
         .patient-info-table {
             width: 100%;
             border-collapse: collapse;
@@ -254,14 +280,19 @@
 
             useEffect(() => {
                 if (!value) {
-                    setLocalY(''); setLocalM(''); setLocalD('');
+                    if (localY || localM || localD) {
+                        setLocalY(''); setLocalM(''); setLocalD('');
+                    }
                 } else {
                     const parts = value.split('-');
                     if (parts.length === 3) {
-                        const roc = parseInt(parts[0]) - 1911;
-                        setLocalY(roc > 0 ? roc.toString() : '');
-                        setLocalM(parts[1]);
-                        setLocalD(parts[2]);
+                        const rocYear = parseInt(parts[0]) - 1911;
+                        const rocYStr = rocYear > 0 ? rocYear.toString() : '';
+                        const mStr = parts[1];
+                        const dStr = parts[2];
+                        setLocalY(prev => prev === rocYStr ? prev : rocYStr);
+                        setLocalM(prev => { if (prev && mStr.startsWith('0') && prev === mStr.replace(/^0/, '')) return prev; return mStr; });
+                        setLocalD(prev => { if (prev && dStr.startsWith('0') && prev === dStr.replace(/^0/, '')) return prev; return dStr; });
                     }
                 }
             }, [value]);
@@ -274,7 +305,6 @@
 
             const handleLocalChange = (part, val) => {
                 const numericVal = val.replace(/[^0-9]/g, '');
-                
                 if (part === 'y') setLocalY(numericVal);
                 if (part === 'm') setLocalM(numericVal);
                 if (part === 'd') setLocalD(numericVal);
@@ -286,16 +316,16 @@
                 if (nextY && nextM && nextD) {
                     let mInt = parseInt(nextM);
                     let dInt = parseInt(nextD);
-                    if (mInt > 12) mInt = 12;
-                    if (dInt > 31) dInt = 31;
-
+                    if (mInt === 0) mInt = 1; if (dInt === 0) dInt = 1;
+                    if (mInt > 12) mInt = 12; if (dInt > 31) dInt = 31;
+                    
                     const adYear = parseInt(nextY) + 1911;
                     const paddedM = mInt.toString().padStart(2, '0');
                     const paddedD = dInt.toString().padStart(2, '0');
                     
                     onChange(`${adYear}-${paddedM}-${paddedD}`);
                 } else if (!nextY && !nextM && !nextD) {
-                    onChange('');
+                    if (value) onChange(''); 
                 }
             };
 
@@ -356,7 +386,7 @@
             const [customClinicName, setCustomClinicName] = useState('');
             const [isStarted, setIsStarted] = useState(false);
             const [fileHandle, setFileHandle] = useState(null);
-            const fileInputRef = useRef(null); // Ref for hidden file input
+            const fileInputRef = useRef(null); 
 
             const [data, setData] = useState(initialData);
             const [plaqueRecords, setPlaqueRecords] = useState([createNewPlaqueRecord(initialData)]);
@@ -489,6 +519,10 @@
 
             const handleSaveFile = async (saveAs = false) => {
                 try {
+                    const cleanId = (patientInfo.id || 'NoID').replace(/[\/\\?%*:|"<>]/g, '-');
+                    const cleanName = (patientInfo.name || 'NoName').replace(/[\/\\?%*:|"<>]/g, '-');
+                    const fileName = `${cleanId}_${cleanName}.json`;
+
                     const exportData = {
                         info: patientInfo,
                         data: data,
@@ -501,9 +535,8 @@
                     if ('showSaveFilePicker' in window && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
                         let handle = fileHandle;
                         if (saveAs || !handle) {
-                            const suggestedName = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
                             handle = await window.showSaveFilePicker({
-                                suggestedName: suggestedName,
+                                suggestedName: fileName,
                                 types: [{ description: 'JSON Data', accept: {'application/json': ['.json']} }],
                             });
                             setFileHandle(handle);
@@ -513,10 +546,30 @@
                         await writable.close();
                         showToast("💾 儲存成功！");
                     } else {
+                        // iOS/Mobile Fallback: Use Web Share or direct download
+                        const file = new File([blob], fileName, { type: 'application/json' });
+                        
+                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                            try {
+                                await navigator.share({
+                                    files: [file],
+                                    title: fileName,
+                                    text: '牙周治療紀錄備份'
+                                });
+                                return; 
+                            } catch (shareError) {
+                                if (shareError.name !== 'AbortError') {
+                                     console.warn("Share failed, fallback to download");
+                                } else {
+                                    return;
+                                }
+                            }
+                        }
+
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${patientInfo.id}_${patientInfo.name || 'record'}.json`;
+                        a.download = fileName;
                         document.body.appendChild(a);
                         a.click();
                         setTimeout(() => {
@@ -526,7 +579,7 @@
                         showToast("💾 檔案已下載");
                     }
                 } catch (err) {
-                    if (err.name !== 'AbortError') { console.error(err); alert("儲存失敗"); }
+                    if (err.name !== 'AbortError') { console.error(err); alert("儲存失敗: " + err.message); }
                 }
             };
 
@@ -685,7 +738,7 @@
                     let threshold = 0.2;
                     if (level === 'medium') threshold = 0.5;
                     if (level === 'high') threshold = 0.8;
-                    if (level === 'verylow') threshold = 0.1;
+                    if (level === 'verylow') threshold = 0.1; // 10%
 
                     allTeeth.forEach(id => {
                         if (newData[id].missing) return; 
@@ -837,9 +890,9 @@
                 <table className="patient-info-table">
                     <tbody>
                         <tr>
-                            <td width="15%">姓名: {patientInfo.name}</td>
-                            <td width="15%">病歷號: {patientInfo.id}</td>
-                            <td width="20%">身分證字號: {patientInfo.idNumber}</td>
+                            <td width="10%">姓名: {patientInfo.name}</td>
+                            <td width="10%">病歷號: {patientInfo.id}</td>
+                            <td width="15%">身分證字號: {patientInfo.idNumber}</td>
                             <td width="10%">性別: {patientInfo.gender}</td>
                             <td width="15%">生日: {formatDateToROC(patientInfo.dob)}</td>
                             <td width="5%">年齡: {patientInfo.age}</td>
@@ -1076,7 +1129,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">iOS File Fix</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">iOS Share Save</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
