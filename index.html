@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>牙周治療紀錄表 (iOS Share Save)</title>
+    <title>牙周治療紀錄表 (Smart Filename)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -286,13 +286,10 @@
                 } else {
                     const parts = value.split('-');
                     if (parts.length === 3) {
-                        const rocYear = parseInt(parts[0]) - 1911;
-                        const rocYStr = rocYear > 0 ? rocYear.toString() : '';
-                        const mStr = parts[1];
-                        const dStr = parts[2];
-                        setLocalY(prev => prev === rocYStr ? prev : rocYStr);
-                        setLocalM(prev => { if (prev && mStr.startsWith('0') && prev === mStr.replace(/^0/, '')) return prev; return mStr; });
-                        setLocalD(prev => { if (prev && dStr.startsWith('0') && prev === dStr.replace(/^0/, '')) return prev; return dStr; });
+                        const roc = parseInt(parts[0]) - 1911;
+                        setLocalY(roc > 0 ? roc.toString() : '');
+                        setLocalM(parts[1]);
+                        setLocalD(parts[2]);
                     }
                 }
             }, [value]);
@@ -305,6 +302,7 @@
 
             const handleLocalChange = (part, val) => {
                 const numericVal = val.replace(/[^0-9]/g, '');
+                
                 if (part === 'y') setLocalY(numericVal);
                 if (part === 'm') setLocalM(numericVal);
                 if (part === 'd') setLocalD(numericVal);
@@ -316,9 +314,9 @@
                 if (nextY && nextM && nextD) {
                     let mInt = parseInt(nextM);
                     let dInt = parseInt(nextD);
-                    if (mInt === 0) mInt = 1; if (dInt === 0) dInt = 1;
-                    if (mInt > 12) mInt = 12; if (dInt > 31) dInt = 31;
-                    
+                    if (mInt > 12) mInt = 12; // Basic validation
+                    if (dInt > 31) dInt = 31;
+
                     const adYear = parseInt(nextY) + 1911;
                     const paddedM = mInt.toString().padStart(2, '0');
                     const paddedD = dInt.toString().padStart(2, '0');
@@ -521,7 +519,12 @@
                 try {
                     const cleanId = (patientInfo.id || 'NoID').replace(/[\/\\?%*:|"<>]/g, '-');
                     const cleanName = (patientInfo.name || 'NoName').replace(/[\/\\?%*:|"<>]/g, '-');
-                    const fileName = `${cleanId}_${cleanName}.json`;
+                    
+                    // Logic: Use Post date if available, else Pre date
+                    const dateToUse = patientInfo.datePost || patientInfo.datePre || '';
+                    const cleanDate = dateToUse.replace(/[\/\\?%*:|"<>]/g, '-');
+                    
+                    const fileName = `${cleanId}_${cleanName}${cleanDate ? '_' + cleanDate : ''}.json`;
 
                     const exportData = {
                         info: patientInfo,
@@ -546,7 +549,7 @@
                         await writable.close();
                         showToast("💾 儲存成功！");
                     } else {
-                        // iOS/Mobile Fallback: Use Web Share or direct download
+                        // iOS/Mobile Fallback
                         const file = new File([blob], fileName, { type: 'application/json' });
                         
                         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -558,11 +561,7 @@
                                 });
                                 return; 
                             } catch (shareError) {
-                                if (shareError.name !== 'AbortError') {
-                                     console.warn("Share failed, fallback to download");
-                                } else {
-                                    return;
-                                }
+                                // Fallback to download if share is cancelled/failed
                             }
                         }
 
@@ -738,7 +737,7 @@
                     let threshold = 0.2;
                     if (level === 'medium') threshold = 0.5;
                     if (level === 'high') threshold = 0.8;
-                    if (level === 'verylow') threshold = 0.1; // 10%
+                    if (level === 'verylow') threshold = 0.1;
 
                     allTeeth.forEach(id => {
                         if (newData[id].missing) return; 
@@ -988,7 +987,7 @@
                                                         <ROCDatePicker 
                                                             value={record.date} 
                                                             onChange={(newDate) => updatePlaqueDate(actualIdx, newDate)}
-                                                            theme="dark" // Using dark theme for visibility on white background
+                                                            theme="dark" // Fixed visibility issue
                                                             isExporting={isExporting}
                                                         />
                                                     </span>
@@ -1129,7 +1128,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">iOS Share Save</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">ROC Input Fixed</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
