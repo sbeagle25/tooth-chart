@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>牙周治療紀錄表 (Smart Filename)</title>
+    <title>牙周治療紀錄表 (Auto Focus & Age)</title>
     
     <!-- React & Tailwind -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -150,32 +150,6 @@
             padding: 0 1px;
         }
 
-        /* 日期欄位修正 */
-        .date-input-custom {
-            background: transparent;
-            border: none; 
-            border-bottom: 1px solid #000; 
-            color: #000; 
-            padding: 0 4px; 
-            border-radius: 0;
-            font-size: 12px; 
-            font-weight: bold;
-            text-align: left;
-            width: 130px; 
-            height: 20px; 
-            line-height: 1.2;
-        }
-        
-        .date-text-static {
-            font-size: 12px;
-            font-weight: 700;
-            color: #000;
-            line-height: 1;
-            padding: 0 4px;
-            white-space: nowrap;
-            display: inline-block;
-        }
-
         .patient-info-table {
             width: 100%;
             border-collapse: collapse;
@@ -272,11 +246,15 @@
         const Teeth31to38 = [31, 32, 33, 34, 35, 36, 37, 38];
         const allTeeth = [...Teeth18to11, ...Teeth21to28, ...Teeth48to41, ...Teeth31to38];
 
-        // --- Custom ROC Date Picker Component ---
+        // --- Custom ROC Date Picker Component (Auto Jump & Fixes typing issue) ---
         const ROCDatePicker = ({ value, onChange, theme = 'dark', isExporting = false }) => {
             const [localY, setLocalY] = useState('');
             const [localM, setLocalM] = useState('');
             const [localD, setLocalD] = useState('');
+            
+            const yearRef = useRef(null);
+            const monthRef = useRef(null);
+            const dayRef = useRef(null);
 
             useEffect(() => {
                 if (!value) {
@@ -286,10 +264,13 @@
                 } else {
                     const parts = value.split('-');
                     if (parts.length === 3) {
-                        const roc = parseInt(parts[0]) - 1911;
-                        setLocalY(roc > 0 ? roc.toString() : '');
-                        setLocalM(parts[1]);
-                        setLocalD(parts[2]);
+                        const rocYear = parseInt(parts[0]) - 1911;
+                        const rocYStr = rocYear > 0 ? rocYear.toString() : '';
+                        const mStr = parts[1];
+                        const dStr = parts[2];
+                        setLocalY(prev => prev === rocYStr ? prev : rocYStr);
+                        setLocalM(prev => { if (prev && mStr.startsWith('0') && prev === mStr.replace(/^0/, '')) return prev; return mStr; });
+                        setLocalD(prev => { if (prev && dStr.startsWith('0') && prev === dStr.replace(/^0/, '')) return prev; return dStr; });
                     }
                 }
             }, [value]);
@@ -307,6 +288,10 @@
                 if (part === 'm') setLocalM(numericVal);
                 if (part === 'd') setLocalD(numericVal);
 
+                // Auto Focus Logic
+                if (part === 'y' && numericVal.length === 3) monthRef.current.focus();
+                if (part === 'm' && numericVal.length === 2) dayRef.current.focus();
+
                 const nextY = part === 'y' ? numericVal : localY;
                 const nextM = part === 'm' ? numericVal : localM;
                 const nextD = part === 'd' ? numericVal : localD;
@@ -314,7 +299,7 @@
                 if (nextY && nextM && nextD) {
                     let mInt = parseInt(nextM);
                     let dInt = parseInt(nextD);
-                    if (mInt > 12) mInt = 12; // Basic validation
+                    if (mInt > 12) mInt = 12; 
                     if (dInt > 31) dInt = 31;
 
                     const adYear = parseInt(nextY) + 1911;
@@ -332,11 +317,20 @@
 
             return (
                 <div className="flex items-center justify-center whitespace-nowrap">
-                    <input type="tel" className={`${inputClass} w-8`} placeholder="YYY" value={localY} onChange={(e) => handleLocalChange('y', e.target.value)} maxLength="3" />
+                    <input 
+                        ref={yearRef}
+                        type="tel" className={`${inputClass} w-8`} placeholder="YYY" value={localY} onChange={(e) => handleLocalChange('y', e.target.value)} maxLength="3" 
+                    />
                     <span className={slashClass}>/</span>
-                    <input type="tel" className={`${inputClass} w-6`} placeholder="MM" value={localM} onChange={(e) => handleLocalChange('m', e.target.value)} maxLength="2" />
+                    <input 
+                        ref={monthRef}
+                        type="tel" className={`${inputClass} w-6`} placeholder="MM" value={localM} onChange={(e) => handleLocalChange('m', e.target.value)} maxLength="2" 
+                    />
                     <span className={slashClass}>/</span>
-                    <input type="tel" className={`${inputClass} w-6`} placeholder="DD" value={localD} onChange={(e) => handleLocalChange('d', e.target.value)} maxLength="2" />
+                    <input 
+                        ref={dayRef}
+                        type="tel" className={`${inputClass} w-6`} placeholder="DD" value={localD} onChange={(e) => handleLocalChange('d', e.target.value)} maxLength="2" 
+                    />
                 </div>
             );
         };
@@ -407,6 +401,28 @@
                 const rocYear = year < 0 ? year : String(year).padStart(3, '0');
                 return `${rocYear}/${parts[1]}/${parts[2]}`;
             };
+
+            // Auto calculate Age
+            useEffect(() => {
+                if (patientInfo.dob) {
+                    const birthDate = new Date(patientInfo.dob);
+                    // Prioritize pre-treatment date, fallback to today
+                    const refDateStr = patientInfo.datePre || new Date().toISOString().split('T')[0];
+                    const refDate = new Date(refDateStr);
+                    
+                    if (!isNaN(birthDate.getTime()) && !isNaN(refDate.getTime())) {
+                        let age = refDate.getFullYear() - birthDate.getFullYear();
+                        const m = refDate.getMonth() - birthDate.getMonth();
+                        if (m < 0 || (m === 0 && refDate.getDate() < birthDate.getDate())) {
+                            age--;
+                        }
+                        // Only update if age is non-negative
+                        if (age >= 0) {
+                            setPatientInfo(prev => ({ ...prev, age: age.toString() }));
+                        }
+                    }
+                }
+            }, [patientInfo.dob, patientInfo.datePre]);
 
             const perioStats = useMemo(() => {
                 let totalTeeth = 0, deepTeethInit = 0, improvedTeeth = 0;
@@ -520,7 +536,6 @@
                     const cleanId = (patientInfo.id || 'NoID').replace(/[\/\\?%*:|"<>]/g, '-');
                     const cleanName = (patientInfo.name || 'NoName').replace(/[\/\\?%*:|"<>]/g, '-');
                     
-                    // Logic: Use Post date if available, else Pre date
                     const dateToUse = patientInfo.datePost || patientInfo.datePre || '';
                     const cleanDate = dateToUse.replace(/[\/\\?%*:|"<>]/g, '-');
                     
@@ -549,7 +564,6 @@
                         await writable.close();
                         showToast("💾 儲存成功！");
                     } else {
-                        // iOS/Mobile Fallback
                         const file = new File([blob], fileName, { type: 'application/json' });
                         
                         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -561,7 +575,7 @@
                                 });
                                 return; 
                             } catch (shareError) {
-                                // Fallback to download if share is cancelled/failed
+                                // Fallback
                             }
                         }
 
@@ -1128,7 +1142,7 @@
                                 <div className="flex justify-between items-center border-b pb-4">
                                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                         {activeTab === 'chart' ? '🦷 牙周治療紀錄表' : '🦠 牙菌斑控制紀錄表'}
-                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">ROC Input Fixed</span>
+                                        <span className="text-xs font-normal text-white bg-green-600 px-2 py-1 rounded">Input Fix & Random 10%</span>
                                     </h1>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-sm font-bold text-gray-500">{clinicName}</span>
